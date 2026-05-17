@@ -1,0 +1,29 @@
+name: Outdated
+
+on:
+  schedule:
+    - cron: '0 9 * * 1' # Mondays 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Check for outdated deps
+        run: |
+          bun outdated --json > outdated.json || true
+          if [ -s outdated.json ] && [ "$(jq 'length' outdated.json)" -gt 0 ]; then
+            echo "Outdated deps detected — see outdated.json artifact."
+            cat outdated.json
+            # In future: file a bd chore issue via gh CLI + bd-recipes.sh
+            exit 0
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: outdated-deps
+          path: outdated.json

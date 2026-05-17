@@ -1,0 +1,14 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Note
+        run: |
+          echo "Vercel auto-deploys on push to main via its Git integration."
+          echo "This workflow is a placeholder for future release notes / tagging."
