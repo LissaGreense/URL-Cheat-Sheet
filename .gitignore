@@ -1,0 +1,35 @@
+node_modules/
+.DS_Store
+*.log
+
+# Bun
+bun.lockb
+
+# Build outputs
+dist/
+build/
+.svelte-kit/
+*.tsbuildinfo
+
+# Vercel
+.vercel/
+
+# Test artifacts
+coverage/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Promptfoo
+.promptfoo/
+promptfoo-results.json
+
+# Beads runtime
+.beads/embeddeddolt/*.log

@@ -1,0 +1,37 @@
+{
+  "name": "url-cheat-sheet",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "workspaces": ["apps/*", "packages/*"],
+  "engines": {
+    "bun": ">=1.3.14",
+    "node": ">=24.0.0"
+  },
+  "packageManager": "bun@1.3.14",
+  "scripts": {
+    "dev": "bun --filter '@url-cheat-sheet/web' dev",
+    "build": "bun --filter '*' build",
+    "typecheck": "tsc -b",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write . && eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "eval": "bun --filter '@url-cheat-sheet/evals' run eval",
+    "bd": "bd --no-daemon",
+    "bv": "bv"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6",
+    "@vitest/coverage-v8": "^4.1.6",
+    "eslint": "^10.4.0",
+    "eslint-plugin-svelte": "^3.0.0",
+    "@typescript-eslint/parser": "^9.0.0",
+    "typescript-eslint": "^9.0.0",
+    "prettier": "^3.8.3",
+    "prettier-plugin-svelte": "^3.4.0",
+    "globals": "^17.0.0",
+    "@eslint/js": "^10.4.0"
+  }
+}
