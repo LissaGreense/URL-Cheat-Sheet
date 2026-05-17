@@ -1,0 +1,37 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits"
+  ],
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": { "enabled": true, "schedule": ["before 6am on monday"] },
+  "packageRules": [
+    {
+      "description": "Group AI SDK packages",
+      "matchPackagePatterns": ["^ai$", "^@ai-sdk/"],
+      "groupName": "ai-sdk"
+    },
+    {
+      "description": "Group Svelte stack",
+      "matchPackagePatterns": ["^svelte$", "^@sveltejs/", "^prettier-plugin-svelte$", "^eslint-plugin-svelte$"],
+      "groupName": "svelte-stack"
+    },
+    {
+      "description": "Group dev tooling",
+      "matchPackagePatterns": ["^typescript$", "^eslint", "^prettier", "^vitest", "^@vitest/", "^vite$"],
+      "groupName": "dev-tools"
+    },
+    {
+      "description": "Auto-merge patch + dev-only minors after CI green",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    },
+    {
+      "description": "Pin exact for 0.x packages",
+      "matchCurrentVersion": "/^0\\./",
+      "rangeStrategy": "pin"
+    }
+  ]
+}
