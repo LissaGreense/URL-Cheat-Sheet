@@ -1,1 +1,1 @@
-export * from './placeholder-agent.ts';
+export * from './placeholder-agent';

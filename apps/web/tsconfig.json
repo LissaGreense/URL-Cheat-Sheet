@@ -15,8 +15,5 @@
     ".svelte-kit/ambient.d.ts",
     ".svelte-kit/types/**/$types.d.ts"
   ],
-  "references": [
-    { "path": "../../packages/schemas" },
-    { "path": "../../packages/agent" }
-  ]
+  "references": [{ "path": "../../packages/schemas" }, { "path": "../../packages/agent" }]
 }

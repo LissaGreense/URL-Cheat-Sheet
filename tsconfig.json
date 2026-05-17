@@ -4,7 +4,6 @@
     { "path": "./packages/schemas" },
     { "path": "./packages/agent" },
     { "path": "./packages/evals" },
-    { "path": "./packages/qa" },
-    { "path": "./apps/web" }
+    { "path": "./packages/qa" }
   ]
 }

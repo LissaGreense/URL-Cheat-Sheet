@@ -15,9 +15,13 @@ if (!suite) {
 }
 
 const cfg = join('packages/evals/suites', suite, 'promptfooconfig.yaml');
-const result = spawnSync('bunx', ['promptfoo', 'eval', '-c', cfg, '--no-cache', '--output', 'json'], {
-  encoding: 'utf8'
-});
+const result = spawnSync(
+  'bunx',
+  ['promptfoo', 'eval', '-c', cfg, '--no-cache', '--output', 'json'],
+  {
+    encoding: 'utf8'
+  }
+);
 
 if (result.status !== 0) {
   console.error(result.stderr);

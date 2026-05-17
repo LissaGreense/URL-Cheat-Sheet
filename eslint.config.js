@@ -28,10 +28,10 @@ export default [
   },
   {
     ignores: [
-      'build/',
-      '.svelte-kit/',
-      'dist/',
-      'node_modules/',
+      '**/build/',
+      '**/.svelte-kit/',
+      '**/dist/',
+      '**/node_modules/',
       '.beads/',
       '.claude/plugins/',
       'coverage/'

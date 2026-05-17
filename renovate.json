@@ -1,10 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    ":dependencyDashboard",
-    ":semanticCommits"
-  ],
+  "extends": ["config:recommended", ":dependencyDashboard", ":semanticCommits"],
   "rangeStrategy": "bump",
   "lockFileMaintenance": { "enabled": true, "schedule": ["before 6am on monday"] },
   "packageRules": [
@@ -15,12 +11,24 @@
     },
     {
       "description": "Group Svelte stack",
-      "matchPackagePatterns": ["^svelte$", "^@sveltejs/", "^prettier-plugin-svelte$", "^eslint-plugin-svelte$"],
+      "matchPackagePatterns": [
+        "^svelte$",
+        "^@sveltejs/",
+        "^prettier-plugin-svelte$",
+        "^eslint-plugin-svelte$"
+      ],
       "groupName": "svelte-stack"
     },
     {
       "description": "Group dev tooling",
-      "matchPackagePatterns": ["^typescript$", "^eslint", "^prettier", "^vitest", "^@vitest/", "^vite$"],
+      "matchPackagePatterns": [
+        "^typescript$",
+        "^eslint",
+        "^prettier",
+        "^vitest",
+        "^@vitest/",
+        "^vite$"
+      ],
       "groupName": "dev-tools"
     },
     {

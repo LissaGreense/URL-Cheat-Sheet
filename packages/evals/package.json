@@ -12,5 +12,8 @@
     "@url-cheat-sheet/schemas": "workspace:*",
     "promptfoo": "0.121.11",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0"
   }
 }

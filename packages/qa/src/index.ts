@@ -1,1 +1,1 @@
-export * from './case-loader.ts';
+export * from './case-loader';

@@ -1,2 +1,2 @@
-export * from './message.ts';
-export * from './qa-case.ts';
+export * from './message';
+export * from './qa-case';
