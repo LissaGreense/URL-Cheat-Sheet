@@ -26,6 +26,7 @@
     "vitest": "^4.1.6",
     "@vitest/coverage-v8": "^4.1.6",
     "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.0.0",
     "eslint-plugin-svelte": "^3.0.0",
     "@typescript-eslint/parser": "^9.0.0",
     "typescript-eslint": "^9.0.0",
