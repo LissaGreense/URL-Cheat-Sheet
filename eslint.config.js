@@ -30,6 +30,7 @@ export default [
     ignores: [
       '**/build/',
       '**/.svelte-kit/',
+      '**/.vercel/',
       '**/dist/',
       '**/node_modules/',
       '.beads/',
