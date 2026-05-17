@@ -30,6 +30,14 @@
         "zod": "^4.4.3",
       },
     },
+    "packages/qa": {
+      "name": "@url-cheat-sheet/qa",
+      "version": "0.0.0",
+      "dependencies": {
+        "@url-cheat-sheet/schemas": "workspace:*",
+        "zod": "^4.4.3",
+      },
+    },
     "packages/schemas": {
       "name": "@url-cheat-sheet/schemas",
       "version": "0.0.0",
@@ -178,6 +186,8 @@
     "@typescript-eslint/visitor-keys": ["@typescript-eslint/visitor-keys@8.59.3", "", { "dependencies": { "@typescript-eslint/types": "8.59.3", "eslint-visitor-keys": "^5.0.0" } }, "sha512-f1UQF7ggd42YiwI5wGrRaPsa+P0CINBlrkLPmGfpq/u/I/oVtecoEIfFR9ag/oa1sLOsRNZ6xehf6qMZhQGBDg=="],
 
     "@url-cheat-sheet/agent": ["@url-cheat-sheet/agent@workspace:packages/agent"],
+
+    "@url-cheat-sheet/qa": ["@url-cheat-sheet/qa@workspace:packages/qa"],
 
     "@url-cheat-sheet/schemas": ["@url-cheat-sheet/schemas@workspace:packages/schemas"],
 
