@@ -1,7 +1,9 @@
 # Team: evals-team
 
 **Owned paths:** `packages/evals/**`, `docs/evals/**`
-**Skills:** `evals-promptfoo`, `superpowers:test-driven-development`
+**Skills:** `evals-promptfoo` (project conventions — where snapshots land, when to trigger), `promptfoo-evals` (general — writing `promptfooconfig.yaml`, providers, assertions, rubrics, datasets), `superpowers:test-driven-development`
+
+**Skill precedence:** project rules (`evals-promptfoo`) win on layout/triggers; defer to `promptfoo-evals` for the config DSL itself.
 
 ## Handoff in
 

@@ -1,7 +1,9 @@
 # Team: frontend-impl-team
 
 **Owned paths:** `apps/web/**`, `packages/qa/src/page-objects/**` (when added)
-**Skills:** `svelte-frontend`, `superpowers:test-driven-development`, `superpowers:testing`
+**Skills:** `svelte-frontend` (project conventions), `svelte-core-bestpractices` (general Svelte 5 patterns — runes, reactivity, performance), `ai-sdk` (for `@ai-sdk/svelte` `Chat` integration in pages/components), `zod-validation-expert` (form + boundary validation), `superpowers:test-driven-development`, `superpowers:testing`
+
+**Skill precedence:** project rules (`svelte-frontend`) win on collisions. Use `svelte-core-bestpractices` for everything project rules don't speak to.
 
 ## Handoff in
 

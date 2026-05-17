@@ -1,7 +1,7 @@
 # Team: orchestrator
 
 **Owned paths:** none (cross-cutting)
-**Skills:** `superpowers:subagent-driven-development`, `beads-recipes`, `using-this-repo`
+**Skills:** `superpowers:subagent-driven-development`, `beads-recipes`, `using-this-repo`, `deploy-to-vercel` (for `deploy`/`push live`/`preview deployment` actions), `bun` (build/install/test ops at the repo scale)
 
 ## Handoff in
 

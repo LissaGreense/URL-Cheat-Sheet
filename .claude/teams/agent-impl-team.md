@@ -1,7 +1,9 @@
 # Team: agent-impl-team
 
 **Owned paths:** `packages/agent/**`
-**Skills:** `superpowers:test-driven-development`, `superpowers:testing`, `claude-api` (if available), `evals-promptfoo`
+**Skills:** `ai-sdk` (primary — for any `generateText`/`streamText`/`tool`/`Agent` work), `zod-validation-expert` (tool I/O schemas, structured outputs), `superpowers:test-driven-development`, `superpowers:testing`, `evals-promptfoo` (project) + `promptfoo-evals` (general)
+
+**On using `ai-sdk`:** the skill warns that training-data knowledge of the AI SDK is stale. Always consult `node_modules/ai/docs/` (the local-installed docs) before writing agent code. Never rely on remembered API shapes.
 
 ## Handoff in
 

@@ -1,7 +1,7 @@
 # Team: review-team
 
 **Owned paths:** none (reviews branches it does not own)
-**Skills:** `superpowers:reviewing-code`
+**Skills:** `superpowers:reviewing-code`, `zod-validation-expert` (schema review — important for any PR touching `packages/schemas` or boundary parsing), `ai-sdk` (for any PR touching agent code)
 
 ## Handoff in
 

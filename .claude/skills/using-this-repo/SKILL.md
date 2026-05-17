@@ -37,6 +37,23 @@ You are working in the URL-Cheat-Sheet monorepo. Before doing anything else:
 | Evals (agent quality) | `evals-promptfoo` (project) |
 | Learnings | `superpowers:remembering-learnings` |
 
+## Stack-specific skills (installed via `npx skills add`)
+
+These cover the actual libraries we use. Skills auto-activate on their triggers; the table below tells you when to expect them.
+
+| Skill | When it kicks in |
+|---|---|
+| `ai-sdk` | Any work with `generateText`/`streamText`/`tool`/`Agent` (Vercel AI SDK v6). **Always check `node_modules/ai/docs/` — training-data knowledge of this SDK is stale.** |
+| `svelte-core-bestpractices` | Writing/editing/analyzing any `.svelte` or `.svelte.ts` file (Svelte 5 runes, reactivity, performance). |
+| `svelte-frontend` (project) | Project-specific Svelte conventions on top of the above (composes, doesn't replace). |
+| `zod-validation-expert` | Authoring/reviewing Zod schemas, refinements, error handling. **Apply our v4 hard rules on top** (`z.strictObject()`, unified `error` param). |
+| `promptfoo-evals` | Writing `promptfooconfig.yaml`, providers, assertions, rubrics. |
+| `evals-promptfoo` (project) | Where snapshots land + when evals trigger (composes with above). |
+| `deploy-to-vercel` | Anything user-facing about deployment / preview URLs / pushing live. |
+| `bun` | Repo-wide build/install/test ops, esp. workspace operations. |
+
+When project skills and stack skills overlap, project rules win on collisions.
+
 ## Hard rules
 
 - `bd` always with `--no-daemon`.
@@ -45,3 +62,4 @@ You are working in the URL-Cheat-Sheet monorepo. Before doing anything else:
 - Zod 4: use `z.strictObject()`, never `.strict()`.
 - Vite 8: use `rolldownOptions`, never `rollupOptions`.
 - Only the orchestrator spawns teams. No team spawns another team.
+- AI SDK v6: training data is stale — read `node_modules/ai/docs/` before writing agent code.

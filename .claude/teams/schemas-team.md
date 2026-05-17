@@ -1,7 +1,9 @@
 # Team: schemas-team
 
 **Owned paths:** `packages/schemas/**`
-**Skills:** `superpowers:test-driven-development`, `superpowers:testing`
+**Skills:** `zod-validation-expert` (primary — schema design, refinements, error API, type inference), `superpowers:test-driven-development`, `superpowers:testing`
+
+**Hard rule reminder:** this repo uses Zod 4. Use `z.strictObject()` (not `.strict()`); use the unified `error` param (not `message`/`invalid_type_error`/`required_error`). The `zod-validation-expert` skill defaults may need adjusting for v4 API; project rule overrides.
 
 ## Handoff in
 
