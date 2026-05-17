@@ -1,0 +1,2969 @@
+# Agentic Workflow + Repo Skeleton — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Stand up a Bun-workspaces monorepo whose first push runs CI green (typecheck + lint + test + build) and ships an empty-but-real `bun run dev` SvelteKit app, alongside a complete agentic workflow scaffold (vendored superpowers, project skills, team specs, beads, docs taxonomy, Renovate, ADRs).
+
+**Architecture:** Bun workspaces with one `apps/web` (SvelteKit + Vercel adapter on experimental Bun runtime) and four `packages/*` (schemas, agent, evals, qa). Workflow infra lives under `.claude/` (vendored superpowers + project skills + team specs + slash commands), `.beads/` (committed Dolt task DB), `docs/` (canonical artifact taxonomy), and `.github/workflows/` (CI gates). Every artifact has one and only one home, indexed by `docs/README.md` for agents.
+
+**Tech Stack:** Bun `^1.3.14`, TypeScript `^6.0.3`, Zod `^4.4.3`, Svelte 5 `^5.55.7`, SvelteKit `^2.60.1`, `@sveltejs/adapter-vercel ^6.3.3` with `runtime: 'experimental_bun1.x'`, Vite 8 + Rolldown, Vitest 4, ESLint 10 + `eslint-plugin-svelte` + Prettier 3.8, Vercel AI SDK `ai ^6.0.184` + `@ai-sdk/anthropic ^3.0.78` + `@ai-sdk/svelte ^4.0.184`, promptfoo `0.121.11`, beads `v1.0.4`, obra/superpowers `v5.1.0` (vendored), Renovate, GitHub Actions, `oven-sh/setup-bun@v2.2.0`.
+
+**Source spec:** [`docs/specs/2026-05-17-agentic-workflow-skeleton.md`](../specs/2026-05-17-agentic-workflow-skeleton.md) (commit `b7a0fc6`).
+
+---
+
+## File Structure (created by this plan)
+
+```
+URL-Cheat-Sheet/
+├── apps/web/                                  # Tasks 8, 9
+│   ├── src/
+│   │   ├── routes/
+│   │   │   ├── +page.svelte
+│   │   │   └── api/health/+server.ts
+│   │   ├── lib/index.ts
+│   │   ├── app.html
+│   │   └── app.d.ts
+│   ├── static/.gitkeep
+│   ├── tests/health.test.ts
+│   ├── svelte.config.js
+│   ├── vite.config.ts
+│   ├── vitest.config.ts
+│   ├── tsconfig.json
+│   └── package.json
+├── packages/
+│   ├── schemas/                               # Task 4
+│   │   ├── src/{index.ts,message.ts,qa-case.ts}
+│   │   ├── tests/message.test.ts
+│   │   ├── tsconfig.json
+│   │   └── package.json
+│   ├── agent/                                 # Task 5
+│   │   ├── src/{index.ts,placeholder-agent.ts}
+│   │   ├── tests/placeholder-agent.test.ts
+│   │   ├── tsconfig.json
+│   │   └── package.json
+│   ├── qa/                                    # Task 6
+│   │   ├── src/{index.ts,case-loader.ts}
+│   │   ├── tests/case-loader.test.ts
+│   │   ├── tsconfig.json
+│   │   └── package.json
+│   └── evals/                                 # Task 7
+│       ├── suites/canary/{promptfooconfig.yaml,cases.jsonl}
+│       ├── judges/.gitkeep
+│       ├── src/run.ts
+│       ├── tsconfig.json
+│       └── package.json
+├── docs/                                      # Task 11 (tree + README)
+│   ├── README.md
+│   ├── specs/                (this plan's spec already lives here)
+│   ├── plans/                (this plan already lives here)
+│   ├── reviews/.gitkeep
+│   ├── qa/{cases,reports}/.gitkeep
+│   ├── evals/.gitkeep
+│   ├── learnings/.gitkeep
+│   └── adr/                                   # Task 26 (.gitkeep in Task 11)
+│       ├── 0001-bun-on-vercel.md
+│       ├── 0002-eslint-over-biome.md
+│       ├── 0003-renovate-over-dependabot.md
+│       └── 0004-vendored-superpowers.md
+├── scripts/                                   # Task 27
+│   ├── bd-recipes.sh
+│   └── snapshot-eval.ts
+├── .claude/
+│   ├── plugins/superpowers/                   # Task 13 (vendored copy)
+│   ├── skills/                                # Tasks 14–20
+│   │   ├── using-this-repo/SKILL.md           # Task 14
+│   │   ├── beads-recipes/SKILL.md             # Task 15
+│   │   ├── task-creation/SKILL.md             # Task 16
+│   │   ├── task-enrichment/SKILL.md           # Task 17
+│   │   ├── qa-standard/SKILL.md               # Task 18
+│   │   ├── evals-promptfoo/SKILL.md           # Task 19
+│   │   └── svelte-frontend/SKILL.md           # Task 20
+│   ├── teams/                                 # Task 21
+│   │   ├── orchestrator.md
+│   │   ├── frontend-impl-team.md
+│   │   ├── agent-impl-team.md
+│   │   ├── schemas-team.md
+│   │   ├── review-team.md
+│   │   ├── qa-team.md
+│   │   └── evals-team.md
+│   ├── commands/                              # Task 22
+│   │   ├── pipeline-status.md
+│   │   └── claim-next.md
+│   └── settings.json                          # Task 22
+├── .github/workflows/
+│   ├── ci.yml                                 # Task 23
+│   ├── qa.yml                                 # Task 24
+│   ├── release.yml                            # Task 24
+│   └── outdated.yml                           # Task 24
+├── .beads/                                    # Task 12 (created by bd init)
+├── bun.lock                                   # generated by Task 4 step 4 (first install)
+├── package.json                               # Task 1
+├── tsconfig.base.json                         # Task 2
+├── tsconfig.json                              # Task 2
+├── eslint.config.js                           # Task 3
+├── .prettierrc                                # Task 3
+├── .prettierignore                            # Task 3
+├── .gitignore                                 # Task 1
+├── .editorconfig                              # Task 1
+├── vercel.json                                # Task 10
+├── renovate.json                              # Task 25
+├── CLAUDE.md                                  # Task 28
+└── README.md                                  # Task 28 (rewrite of stub)
+```
+
+**Responsibility per file:** root config files own toolchain defaults; per-package `package.json` + `tsconfig.json` own that workspace's surface; each `SKILL.md` owns one workflow stage's behavior; each team `.md` owns one bundle of skills + a code area; each workflow `.yml` owns one CI trigger. No file should serve two distinct purposes.
+
+---
+
+## Phase A — Monorepo Foundation
+
+### Task 1: Root package.json, .gitignore, .editorconfig
+
+**Files:**
+- Create: `package.json`
+- Create: `.gitignore`
+- Create: `.editorconfig`
+
+- [ ] **Step 1: Write the root `package.json`**
+
+```json
+{
+  "name": "url-cheat-sheet",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "workspaces": ["apps/*", "packages/*"],
+  "engines": {
+    "bun": ">=1.3.14",
+    "node": ">=24.0.0"
+  },
+  "packageManager": "bun@1.3.14",
+  "scripts": {
+    "dev": "bun --filter '@url-cheat-sheet/web' dev",
+    "build": "bun --filter '*' build",
+    "typecheck": "tsc -b",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write . && eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "eval": "bun --filter '@url-cheat-sheet/evals' run eval",
+    "bd": "bd --no-daemon",
+    "bv": "bv"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6",
+    "@vitest/coverage-v8": "^4.1.6",
+    "eslint": "^10.4.0",
+    "eslint-plugin-svelte": "^3.0.0",
+    "@typescript-eslint/parser": "^9.0.0",
+    "typescript-eslint": "^9.0.0",
+    "prettier": "^3.8.3",
+    "prettier-plugin-svelte": "^3.4.0",
+    "globals": "^17.0.0",
+    "@eslint/js": "^10.4.0"
+  }
+}
+```
+
+- [ ] **Step 2: Write `.gitignore`**
+
+```gitignore
+node_modules/
+.DS_Store
+*.log
+
+# Bun
+bun.lockb
+
+# Build outputs
+dist/
+build/
+.svelte-kit/
+*.tsbuildinfo
+
+# Vercel
+.vercel/
+
+# Test artifacts
+coverage/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Promptfoo
+.promptfoo/
+promptfoo-results.json
+
+# Beads runtime
+.beads/embeddeddolt/*.log
+```
+
+- [ ] **Step 3: Write `.editorconfig`**
+
+```ini
+root = true
+
+[*]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.md]
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab
+```
+
+- [ ] **Step 4: Verify**
+
+Run: `cat package.json | head -5`
+Expected: shows `"name": "url-cheat-sheet"` and workspace config.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add package.json .gitignore .editorconfig
+git commit -m "chore(scaffold): root package.json, .gitignore, .editorconfig
+
+Establishes Bun workspaces (apps/*, packages/*), pins runtime to
+Bun 1.3.14, declares root scripts (typecheck/lint/test/build/eval)."
+```
+
+---
+
+### Task 2: Shared TypeScript base config
+
+**Files:**
+- Create: `tsconfig.base.json`
+- Create: `tsconfig.json` (root project-references file)
+
+- [ ] **Step 1: Write `tsconfig.base.json`** (extended by every package)
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true,
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "incremental": true
+  },
+  "exclude": ["node_modules", "dist", "build", ".svelte-kit"]
+}
+```
+
+- [ ] **Step 2: Write root `tsconfig.json`** (project references aggregator)
+
+```json
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/schemas" },
+    { "path": "./packages/agent" },
+    { "path": "./packages/evals" },
+    { "path": "./packages/qa" },
+    { "path": "./apps/web" }
+  ]
+}
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add tsconfig.base.json tsconfig.json
+git commit -m "chore(scaffold): TypeScript 6 strict base config + project refs
+
+Strict + verbatimModuleSyntax + noUncheckedIndexedAccess. TS 6 defaults
+(ES2023 target, ESNext module). Project references aggregate per-workspace
+typecheck."
+```
+
+---
+
+### Task 3: ESLint 10 flat config + Prettier 3.8
+
+**Files:**
+- Create: `eslint.config.js`
+- Create: `.prettierrc`
+- Create: `.prettierignore`
+
+- [ ] **Step 1: Write `eslint.config.js`** (flat config, ESLint 10)
+
+```js
+import js from '@eslint/js';
+import ts from 'typescript-eslint';
+import svelte from 'eslint-plugin-svelte';
+import prettier from 'eslint-config-prettier';
+import globals from 'globals';
+
+/** @type {import('eslint').Linter.Config[]} */
+export default [
+  js.configs.recommended,
+  ...ts.configs.recommended,
+  ...svelte.configs['flat/recommended'],
+  prettier,
+  ...svelte.configs['flat/prettier'],
+  {
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node }
+    }
+  },
+  {
+    files: ['**/*.svelte', '**/*.svelte.ts'],
+    languageOptions: {
+      parserOptions: {
+        parser: ts.parser,
+        projectService: true,
+        extraFileExtensions: ['.svelte']
+      }
+    }
+  },
+  {
+    ignores: [
+      'build/',
+      '.svelte-kit/',
+      'dist/',
+      'node_modules/',
+      '.beads/',
+      '.claude/plugins/',
+      'coverage/'
+    ]
+  }
+];
+```
+
+- [ ] **Step 2: Add ESLint config deps to root package.json**
+
+Already added in Task 1, but verify `eslint-config-prettier` is present. If missing, add it:
+
+```bash
+# only run if eslint-config-prettier is not in devDependencies yet
+bun add -d -D eslint-config-prettier@^10.0.0
+```
+
+- [ ] **Step 3: Write `.prettierrc`**
+
+```json
+{
+  "useTabs": false,
+  "tabWidth": 2,
+  "singleQuote": true,
+  "trailingComma": "none",
+  "printWidth": 100,
+  "plugins": ["prettier-plugin-svelte"],
+  "overrides": [
+    { "files": "*.svelte", "options": { "parser": "svelte" } }
+  ]
+}
+```
+
+- [ ] **Step 4: Write `.prettierignore`**
+
+```
+build/
+.svelte-kit/
+dist/
+node_modules/
+.beads/
+.claude/plugins/
+coverage/
+bun.lock
+*.md
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add eslint.config.js .prettierrc .prettierignore
+git commit -m "chore(scaffold): ESLint 10 flat config + Prettier 3.8
+
+ESLint over Biome for runes-aware Svelte rules (see ADR 0002).
+Flat config wires TS + Svelte plugins + Prettier compatibility."
+```
+
+---
+
+## Phase B — Workspace Packages
+
+### Task 4: `packages/schemas` scaffold (Zod 4 base types)
+
+**Files:**
+- Create: `packages/schemas/package.json`
+- Create: `packages/schemas/tsconfig.json`
+- Create: `packages/schemas/src/index.ts`
+- Create: `packages/schemas/src/message.ts`
+- Create: `packages/schemas/src/qa-case.ts`
+- Create: `packages/schemas/tests/message.test.ts`
+
+- [ ] **Step 1: Write `packages/schemas/package.json`**
+
+```json
+{
+  "name": "@url-cheat-sheet/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./message": "./src/message.ts",
+    "./qa-case": "./src/qa-case.ts"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}
+```
+
+- [ ] **Step 2: Write `packages/schemas/tsconfig.json`**
+
+```json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*", "tests/**/*"]
+}
+```
+
+- [ ] **Step 3: Write failing test `packages/schemas/tests/message.test.ts`**
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { messageSchema, type Message } from '../src/message.ts';
+
+describe('messageSchema', () => {
+  it('accepts a valid user message', () => {
+    const input = { role: 'user', content: 'hi' };
+    const parsed = messageSchema.parse(input);
+    expect(parsed).toEqual(input);
+  });
+
+  it('rejects unknown roles', () => {
+    const result = messageSchema.safeParse({ role: 'wizard', content: 'hi' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects extra unknown properties (strict)', () => {
+    const result = messageSchema.safeParse({
+      role: 'user',
+      content: 'hi',
+      sneaky: true
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('inferred type matches schema', () => {
+    const _typecheck: Message = { role: 'assistant', content: 'ok' };
+    expect(_typecheck.role).toBe('assistant');
+  });
+});
+```
+
+- [ ] **Step 4: Run test — confirm failure**
+
+Run: `bun install && bun --filter @url-cheat-sheet/schemas test`
+Expected: FAIL (`message.ts` does not exist yet).
+
+- [ ] **Step 5: Write `packages/schemas/src/message.ts`**
+
+```ts
+import { z } from 'zod';
+
+export const messageRoleSchema = z.enum(['system', 'user', 'assistant', 'tool']);
+
+export const messageSchema = z.strictObject({
+  role: messageRoleSchema,
+  content: z.string()
+});
+
+export type Message = z.infer<typeof messageSchema>;
+export type MessageRole = z.infer<typeof messageRoleSchema>;
+```
+
+- [ ] **Step 6: Write `packages/schemas/src/qa-case.ts`** (used by qa-standard skill)
+
+```ts
+import { z } from 'zod';
+
+export const qaStepSchema = z.strictObject({
+  action: z.enum(['navigate', 'click', 'type', 'wait', 'assert']),
+  target: z.string().optional(),
+  value: z.string().optional(),
+  assertion: z.string().optional()
+});
+
+export const qaCaseSchema = z.strictObject({
+  name: z.string(),
+  setup: z.array(z.string()).default([]),
+  steps: z.array(qaStepSchema).min(1),
+  assertions: z.array(z.string()).min(1),
+  dataDependencies: z.array(z.string()).default([])
+});
+
+export type QACase = z.infer<typeof qaCaseSchema>;
+export type QAStep = z.infer<typeof qaStepSchema>;
+```
+
+- [ ] **Step 7: Write `packages/schemas/src/index.ts`** (barrel)
+
+```ts
+export * from './message.ts';
+export * from './qa-case.ts';
+```
+
+- [ ] **Step 8: Run test — confirm pass**
+
+Run: `bun --filter @url-cheat-sheet/schemas test`
+Expected: PASS (4 tests).
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add packages/schemas
+git commit -m "feat(schemas): Zod 4 message + qa-case schemas
+
+Initial shared schema package. Uses Zod 4's z.strictObject (not .strict())
+to reject extra properties. Message + QACase schemas underpin agent IO
+and the qa-standard skill respectively."
+```
+
+---
+
+### Task 5: `packages/agent` scaffold (placeholder using AI SDK v6)
+
+**Files:**
+- Create: `packages/agent/package.json`
+- Create: `packages/agent/tsconfig.json`
+- Create: `packages/agent/src/index.ts`
+- Create: `packages/agent/src/placeholder-agent.ts`
+- Create: `packages/agent/tests/placeholder-agent.test.ts`
+
+- [ ] **Step 1: Write `packages/agent/package.json`**
+
+```json
+{
+  "name": "@url-cheat-sheet/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@url-cheat-sheet/schemas": "workspace:*",
+    "ai": "^6.0.184",
+    "@ai-sdk/anthropic": "^3.0.78",
+    "@ai-sdk/openai": "^3.0.64",
+    "zod": "^4.4.3"
+  }
+}
+```
+
+- [ ] **Step 2: Write `packages/agent/tsconfig.json`**
+
+```json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*", "tests/**/*"],
+  "references": [{ "path": "../schemas" }]
+}
+```
+
+- [ ] **Step 3: Write failing test `packages/agent/tests/placeholder-agent.test.ts`**
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { describeAgent } from '../src/placeholder-agent.ts';
+
+describe('placeholder agent', () => {
+  it('returns a stable self-description', () => {
+    const info = describeAgent();
+    expect(info.name).toBe('url-cheat-sheet-agent');
+    expect(info.version).toBe('0.0.0');
+    expect(info.tools).toEqual([]);
+  });
+});
+```
+
+- [ ] **Step 4: Run test — confirm failure**
+
+Run: `bun --filter @url-cheat-sheet/agent test`
+Expected: FAIL (no source yet).
+
+- [ ] **Step 5: Write `packages/agent/src/placeholder-agent.ts`**
+
+```ts
+/**
+ * Self-description of the agent shell.
+ *
+ * This is a deliberately empty placeholder. Real tools, prompt, and provider
+ * configuration land when the URL-Cheat-Sheet app is brainstormed and planned.
+ */
+export interface AgentInfo {
+  name: string;
+  version: string;
+  tools: string[];
+}
+
+export function describeAgent(): AgentInfo {
+  return {
+    name: 'url-cheat-sheet-agent',
+    version: '0.0.0',
+    tools: []
+  };
+}
+```
+
+- [ ] **Step 6: Write `packages/agent/src/index.ts`**
+
+```ts
+export * from './placeholder-agent.ts';
+```
+
+- [ ] **Step 7: Run test — confirm pass**
+
+Run: `bun --filter @url-cheat-sheet/agent test`
+Expected: PASS.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add packages/agent
+git commit -m "feat(agent): empty agent package with AI SDK v6 deps wired
+
+Placeholder describeAgent() proves the package compiles + tests. Real
+agent + tools land when the app spec is written."
+```
+
+---
+
+### Task 6: `packages/qa` scaffold (case loader)
+
+**Files:**
+- Create: `packages/qa/package.json`
+- Create: `packages/qa/tsconfig.json`
+- Create: `packages/qa/src/index.ts`
+- Create: `packages/qa/src/case-loader.ts`
+- Create: `packages/qa/tests/case-loader.test.ts`
+
+- [ ] **Step 1: Write `packages/qa/package.json`**
+
+```json
+{
+  "name": "@url-cheat-sheet/qa",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@url-cheat-sheet/schemas": "workspace:*",
+    "zod": "^4.4.3"
+  }
+}
+```
+
+- [ ] **Step 2: Write `packages/qa/tsconfig.json`**
+
+```json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*", "tests/**/*"],
+  "references": [{ "path": "../schemas" }]
+}
+```
+
+- [ ] **Step 3: Write failing test `packages/qa/tests/case-loader.test.ts`**
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { parseCase } from '../src/case-loader.ts';
+
+describe('parseCase', () => {
+  it('parses a minimal valid case', () => {
+    const raw = {
+      name: 'smoke',
+      steps: [{ action: 'navigate', target: '/' }],
+      assertions: ['page loads']
+    };
+    const parsed = parseCase(raw);
+    expect(parsed.name).toBe('smoke');
+    expect(parsed.setup).toEqual([]);
+    expect(parsed.dataDependencies).toEqual([]);
+  });
+
+  it('rejects a case with no assertions', () => {
+    const raw = {
+      name: 'bad',
+      steps: [{ action: 'navigate', target: '/' }],
+      assertions: []
+    };
+    expect(() => parseCase(raw)).toThrow();
+  });
+});
+```
+
+- [ ] **Step 4: Run test — confirm failure**
+
+Run: `bun --filter @url-cheat-sheet/qa test`
+Expected: FAIL.
+
+- [ ] **Step 5: Write `packages/qa/src/case-loader.ts`**
+
+```ts
+import { qaCaseSchema, type QACase } from '@url-cheat-sheet/schemas';
+
+/**
+ * Parses raw input into a validated QACase. Throws if the input does not
+ * conform to the schema in @url-cheat-sheet/schemas/qa-case.
+ */
+export function parseCase(raw: unknown): QACase {
+  return qaCaseSchema.parse(raw);
+}
+```
+
+- [ ] **Step 6: Write `packages/qa/src/index.ts`**
+
+```ts
+export * from './case-loader.ts';
+```
+
+- [ ] **Step 7: Run test — confirm pass**
+
+Run: `bun --filter @url-cheat-sheet/qa test`
+Expected: PASS (2 tests).
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add packages/qa
+git commit -m "feat(qa): case-loader that validates QA cases against shared schema"
+```
+
+---
+
+### Task 7: `packages/evals` scaffold (promptfoo canary suite)
+
+**Files:**
+- Create: `packages/evals/package.json`
+- Create: `packages/evals/tsconfig.json`
+- Create: `packages/evals/src/run.ts`
+- Create: `packages/evals/suites/canary/promptfooconfig.yaml`
+- Create: `packages/evals/suites/canary/cases.jsonl`
+- Create: `packages/evals/judges/.gitkeep`
+
+- [ ] **Step 1: Write `packages/evals/package.json`**
+
+```json
+{
+  "name": "@url-cheat-sheet/evals",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/run.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "eval": "bun src/run.ts"
+  },
+  "dependencies": {
+    "@url-cheat-sheet/schemas": "workspace:*",
+    "promptfoo": "0.121.11",
+    "zod": "^4.4.3"
+  }
+}
+```
+
+- [ ] **Step 2: Write `packages/evals/tsconfig.json`**
+
+```json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*"],
+  "references": [{ "path": "../schemas" }]
+}
+```
+
+- [ ] **Step 3: Write `packages/evals/suites/canary/promptfooconfig.yaml`**
+
+```yaml
+description: Canary suite — proves the eval harness runs end-to-end.
+prompts:
+  - 'Echo the word HELLO and nothing else.'
+providers:
+  - id: echo
+    config:
+      type: echo
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: HELLO
+```
+
+- [ ] **Step 4: Write `packages/evals/suites/canary/cases.jsonl`**
+
+```jsonl
+{"name":"canary","input":"","expected":"HELLO"}
+```
+
+- [ ] **Step 5: Write `packages/evals/judges/.gitkeep`**
+
+```
+# Judge prompts (LLM-as-judge) land here. Zod-validated. See ADR / spec §11.
+```
+
+- [ ] **Step 6: Write `packages/evals/src/run.ts`** (wrapper that snapshots results)
+
+```ts
+#!/usr/bin/env bun
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+/**
+ * Runs a promptfoo suite and writes a snapshot to docs/evals/<suite>-<date>.md.
+ *
+ * Usage: bun packages/evals/src/run.ts <suite-name>
+ */
+const suite = process.argv[2];
+if (!suite) {
+  console.error('Usage: bun src/run.ts <suite-name>');
+  process.exit(2);
+}
+
+const cfg = join('packages/evals/suites', suite, 'promptfooconfig.yaml');
+const result = spawnSync('bunx', ['promptfoo', 'eval', '-c', cfg, '--no-cache', '--output', 'json'], {
+  encoding: 'utf8'
+});
+
+if (result.status !== 0) {
+  console.error(result.stderr);
+  process.exit(result.status ?? 1);
+}
+
+const today = new Date().toISOString().slice(0, 10);
+const outDir = 'docs/evals';
+mkdirSync(outDir, { recursive: true });
+const outFile = join(outDir, `${suite}-${today}.md`);
+
+const snapshot = [
+  `# Eval snapshot: ${suite} — ${today}`,
+  '',
+  '```json',
+  result.stdout.trim() || '{}',
+  '```'
+].join('\n');
+
+writeFileSync(outFile, snapshot, 'utf8');
+console.log(`Snapshot written to ${outFile}`);
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add packages/evals
+git commit -m "feat(evals): promptfoo canary suite + snapshot runner
+
+Echo-provider canary proves the eval harness wires up. run.ts wraps
+promptfoo and writes a dated snapshot to docs/evals/."
+```
+
+---
+
+## Phase C — SvelteKit App Shell
+
+### Task 8: `apps/web` scaffold (SvelteKit + Vercel adapter on Bun)
+
+**Files:**
+- Create: `apps/web/package.json`
+- Create: `apps/web/tsconfig.json`
+- Create: `apps/web/svelte.config.js`
+- Create: `apps/web/vite.config.ts`
+- Create: `apps/web/vitest.config.ts`
+- Create: `apps/web/src/app.html`
+- Create: `apps/web/src/app.d.ts`
+- Create: `apps/web/src/lib/index.ts`
+- Create: `apps/web/src/routes/+page.svelte`
+- Create: `apps/web/static/.gitkeep`
+
+- [ ] **Step 1: Write `apps/web/package.json`**
+
+```json
+{
+  "name": "@url-cheat-sheet/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@url-cheat-sheet/agent": "workspace:*",
+    "@url-cheat-sheet/schemas": "workspace:*",
+    "@ai-sdk/svelte": "^4.0.184",
+    "ai": "^6.0.184",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-vercel": "^6.3.3",
+    "@sveltejs/kit": "^2.60.1",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "svelte": "^5.55.7",
+    "svelte-check": "^4.3.0",
+    "vite": "^8.0.13",
+    "@testing-library/svelte": "^5.3.0",
+    "jsdom": "^28.0.0"
+  }
+}
+```
+
+- [ ] **Step 2: Write `apps/web/svelte.config.js`**
+
+```js
+import adapter from '@sveltejs/adapter-vercel';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+
+/** @type {import('@sveltejs/kit').Config} */
+const config = {
+  preprocess: vitePreprocess(),
+  kit: {
+    adapter: adapter({
+      // Bun on Vercel is currently experimental — see docs/adr/0001-bun-on-vercel.md
+      runtime: 'experimental_bun1.x'
+    })
+  }
+};
+
+export default config;
+```
+
+- [ ] **Step 3: Write `apps/web/vite.config.ts`**
+
+```ts
+import { sveltekit } from '@sveltejs/kit/vite';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  plugins: [sveltekit()],
+  // Vite 8 uses Rolldown as the default bundler — use `rolldownOptions`,
+  // not the deprecated `rollupOptions`.
+  build: {
+    rolldownOptions: {}
+  }
+});
+```
+
+- [ ] **Step 4: Write `apps/web/vitest.config.ts`**
+
+```ts
+import { defineConfig } from 'vitest/config';
+import { sveltekit } from '@sveltejs/kit/vite';
+
+export default defineConfig({
+  plugins: [sveltekit()],
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    globals: false
+  }
+});
+```
+
+- [ ] **Step 5: Write `apps/web/tsconfig.json`**
+
+```json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "moduleResolution": "bundler",
+    "types": ["vite/client"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.js",
+    "src/**/*.svelte",
+    "tests/**/*.ts",
+    ".svelte-kit/ambient.d.ts",
+    ".svelte-kit/types/**/$types.d.ts"
+  ],
+  "references": [
+    { "path": "../../packages/schemas" },
+    { "path": "../../packages/agent" }
+  ]
+}
+```
+
+- [ ] **Step 6: Write `apps/web/src/app.html`**
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>URL Cheat Sheet</title>
+    %sveltekit.head%
+  </head>
+  <body>
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>
+```
+
+- [ ] **Step 7: Write `apps/web/src/app.d.ts`**
+
+```ts
+// See https://svelte.dev/docs/kit/types#app
+declare global {
+  namespace App {
+    // interface Error {}
+    // interface Locals {}
+    // interface PageData {}
+    // interface PageState {}
+    // interface Platform {}
+  }
+}
+
+export {};
+```
+
+- [ ] **Step 8: Write `apps/web/src/lib/index.ts`**
+
+```ts
+// Place shared client-side modules here. Aliased to `$lib` by SvelteKit.
+export const APP_NAME = 'URL Cheat Sheet';
+```
+
+- [ ] **Step 9: Write `apps/web/src/routes/+page.svelte`**
+
+```svelte
+<script lang="ts">
+  import { APP_NAME } from '$lib';
+</script>
+
+<main>
+  <h1>{APP_NAME}</h1>
+  <p>Skeleton up. Brainstorm the app spec next.</p>
+</main>
+```
+
+- [ ] **Step 10: Touch `apps/web/static/.gitkeep`**
+
+```bash
+mkdir -p apps/web/static
+touch apps/web/static/.gitkeep
+```
+
+- [ ] **Step 11: Verify the dev server boots**
+
+Run: `bun install && bun --filter @url-cheat-sheet/web dev -- --port 5173 &` then wait 4s, then `curl -sf http://localhost:5173 | head -20 && kill %1`
+Expected: HTML output containing `URL Cheat Sheet`. (Use `pkill -f 'vite dev'` if the kill doesn't fire.)
+
+- [ ] **Step 12: Commit**
+
+```bash
+git add apps/web
+git commit -m "feat(web): SvelteKit shell with adapter-vercel on experimental Bun
+
+Minimal page proves the toolchain. Vite 8 + Rolldown (rolldownOptions,
+not rollupOptions). Adapter pinned to runtime 'experimental_bun1.x' —
+see ADR 0001."
+```
+
+---
+
+### Task 9: Health endpoint + test
+
+**Files:**
+- Create: `apps/web/src/routes/api/health/+server.ts`
+- Create: `apps/web/tests/health.test.ts`
+
+- [ ] **Step 1: Write failing test `apps/web/tests/health.test.ts`**
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { GET } from '../src/routes/api/health/+server.ts';
+
+describe('GET /api/health', () => {
+  it('responds 200 with ok status and a version', async () => {
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe('ok');
+    expect(typeof body.version).toBe('string');
+  });
+});
+```
+
+- [ ] **Step 2: Run test — confirm failure**
+
+Run: `bun --filter @url-cheat-sheet/web test`
+Expected: FAIL (handler does not exist).
+
+- [ ] **Step 3: Write `apps/web/src/routes/api/health/+server.ts`**
+
+```ts
+import { json } from '@sveltejs/kit';
+
+/**
+ * Liveness probe. Returns the package version so deploy smoke tests can
+ * detect rollouts.
+ */
+export function GET(): Response {
+  return json({
+    status: 'ok',
+    version: '0.0.0'
+  });
+}
+```
+
+- [ ] **Step 4: Run test — confirm pass**
+
+Run: `bun --filter @url-cheat-sheet/web test`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web/src/routes/api/health apps/web/tests/health.test.ts
+git commit -m "feat(web): /api/health endpoint with unit test
+
+Liveness probe for Vercel deploys and CI smoke tests."
+```
+
+---
+
+### Task 10: `vercel.json` (deploy config)
+
+**Files:**
+- Create: `vercel.json`
+
+- [ ] **Step 1: Write `vercel.json`**
+
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "bunVersion": "1.x",
+  "installCommand": "bun install --frozen-lockfile",
+  "buildCommand": "bun --filter @url-cheat-sheet/web build",
+  "outputDirectory": "apps/web/.vercel/output",
+  "framework": "sveltekit"
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add vercel.json
+git commit -m "chore(deploy): vercel.json pins Bun + monorepo build path
+
+Pins Bun 1.x on Vercel, declares the SvelteKit subapp as the build
+target so the monorepo root works as the project root."
+```
+
+---
+
+## Phase D — Docs Taxonomy
+
+### Task 11: `docs/` tree + agent-facing README
+
+**Files:**
+- Create: `docs/README.md`
+- Create: `docs/reviews/.gitkeep`
+- Create: `docs/qa/cases/.gitkeep`
+- Create: `docs/qa/reports/.gitkeep`
+- Create: `docs/evals/.gitkeep`
+- Create: `docs/learnings/.gitkeep`
+- Create: `docs/adr/.gitkeep`
+
+- [ ] **Step 1: Create directories**
+
+```bash
+mkdir -p docs/reviews docs/qa/cases docs/qa/reports docs/evals docs/learnings docs/adr
+touch docs/reviews/.gitkeep docs/qa/cases/.gitkeep docs/qa/reports/.gitkeep docs/evals/.gitkeep docs/learnings/.gitkeep docs/adr/.gitkeep
+```
+
+- [ ] **Step 2: Write `docs/README.md`** (the agent-facing index)
+
+```markdown
+# Docs — Agent Index
+
+This directory is the single source of truth for design, planning, review,
+and validation artifacts. Every project skill that emits a document writes
+to one of the folders below using the naming convention given. Do not
+invent new folders without an ADR.
+
+| Folder | What goes here | Naming | Written by |
+|---|---|---|---|
+| `specs/` | Brainstorming output | `YYYY-MM-DD-<slug>.md` | `superpowers:brainstorming` |
+| `plans/` | Implementation plans | `YYYY-MM-DD-<slug>.md` | `superpowers:writing-plans` |
+| `reviews/` | Code review reports | `YYYY-MM-DD-<slug>.md` | `superpowers:reviewing-code` |
+| `qa/cases/` | Reusable QA test plans | `<feature-slug>.md` | `qa-standard` (project) |
+| `qa/reports/` | QA run output | `YYYY-MM-DD-<feature-slug>.md` | `qa-standard` (project) |
+| `evals/` | Eval suite snapshots | `<suite>-YYYY-MM-DD.md` | `evals-promptfoo` (project) |
+| `learnings/` | Mined session learnings | `<topic>.md` | `superpowers:remembering-learnings` |
+| `adr/` | Architectural decision records | `NNNN-<slug>.md` (sequential) | any author |
+
+## Naming rules
+
+- **Date prefix** for any time-bounded artifact (specs, plans, reviews, QA reports, eval snapshots).
+- **Slug** is lowercase kebab-case, no dots, no underscores.
+- **ADRs** use a zero-padded sequential number (`0001-…`, `0002-…`).
+- **QA cases** are reusable across runs, so no date prefix — the run goes in `reports/`.
+
+## Cross-references
+
+When one artifact references another, link by relative path so renames break loudly:
+`../specs/2026-05-17-foo.md`, not `docs/specs/2026-05-17-foo.md` and not `[foo](foo)`.
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add docs/README.md docs/reviews docs/qa docs/evals docs/learnings docs/adr
+git commit -m "docs(scaffold): canonical docs taxonomy + agent-facing index
+
+docs/README.md tells agents where to write each artifact and how to
+name it. Every project skill references this file."
+```
+
+---
+
+## Phase E — Beads Initialization
+
+### Task 12: Initialize beads task DB
+
+**Files:**
+- Create: `.beads/` (via `bd init`)
+
+- [ ] **Step 1: Confirm `bd` is installed**
+
+Run: `which bd && bd --version`
+Expected: a path and a version `1.0.4` or newer. If missing:
+
+```bash
+# Install per https://gastownhall.github.io/beads/installation
+brew install gastownhall/tap/beads || curl -fsSL https://gastownhall.github.io/beads/install.sh | sh
+```
+
+- [ ] **Step 2: Initialize the DB**
+
+Run: `bd --no-daemon init`
+Expected: `.beads/` directory created with the Dolt-backed store inside.
+
+- [ ] **Step 3: Sanity check**
+
+Run: `bd --no-daemon ready` (lists ready issues — should be empty)
+Expected: empty list, exit 0.
+
+- [ ] **Step 4: Add a single bootstrap issue**
+
+```bash
+bd --no-daemon create \
+  --title "Bootstrap: skeleton complete, ready for first feature spec" \
+  --kind chore \
+  --status ready
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add .beads
+git commit -m "chore(beads): initialize task DB + bootstrap chore issue
+
+Beads uses Dolt — commit .beads/ for version-controlled task graph.
+--no-daemon required in worktree environments (see CLAUDE.md)."
+```
+
+---
+
+## Phase F — Vendored Superpowers + Project Skills
+
+### Task 13: Vendor obra/superpowers v5.1.0 into `.claude/plugins/superpowers/`
+
+**Files:**
+- Create: `.claude/plugins/superpowers/` (copied tree)
+
+- [ ] **Step 1: Locate the source**
+
+Source path on this machine:
+`/Users/sara/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/`
+
+Run: `ls /Users/sara/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/skills/ | head`
+Expected: directory listing of skill folders (brainstorming, writing-plans, etc.).
+
+- [ ] **Step 2: Copy into the repo**
+
+```bash
+mkdir -p .claude/plugins/superpowers
+cp -R /Users/sara/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/. .claude/plugins/superpowers/
+```
+
+- [ ] **Step 3: Drop a VERSION marker for upgrade tracking**
+
+```bash
+echo "v5.1.0" > .claude/plugins/superpowers/VENDORED_VERSION
+```
+
+- [ ] **Step 4: Verify**
+
+Run: `cat .claude/plugins/superpowers/VENDORED_VERSION && ls .claude/plugins/superpowers/skills | wc -l`
+Expected: `v5.1.0` then a count of vendored skills (≥14).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add .claude/plugins/superpowers
+git commit -m "chore(skills): vendor obra/superpowers v5.1.0 into .claude/plugins/
+
+Vendored so we can edit in-tree when an upstream skill is wrong for
+us. VENDORED_VERSION tracks the source for future upgrades.
+See ADR 0004."
+```
+
+---
+
+### Task 14: Project skill — `using-this-repo` (session orientation)
+
+**Files:**
+- Create: `.claude/skills/using-this-repo/SKILL.md`
+
+- [ ] **Step 1: Write the skill**
+
+```markdown
+---
+name: using-this-repo
+description: Use at the start of any conversation in URL-Cheat-Sheet. Establishes how this repo is structured, where artifacts live, what skills/teams exist, and the canonical workflow stages.
+---
+
+# Using this repo
+
+You are working in the URL-Cheat-Sheet monorepo. Before doing anything else:
+
+1. **Read `docs/README.md`** — the canonical docs taxonomy. Every artifact has one home.
+2. **Read `CLAUDE.md`** at the repo root — repo-wide agent rules.
+3. **Check `bd --no-daemon ready`** — what's claimable right now.
+4. **Know the pipeline** — see `docs/specs/2026-05-17-agentic-workflow-skeleton.md` §8.
+
+## Repo geography
+
+- `apps/web/` — SvelteKit app (Vercel target)
+- `packages/{schemas,agent,evals,qa}` — workspaces
+- `.claude/plugins/superpowers/` — vendored skills, edit-in-tree
+- `.claude/skills/` — project skills (override upstream by name)
+- `.claude/teams/` — team specs
+- `.beads/` — task DB (always `bd --no-daemon`)
+- `docs/` — every doc artifact (see `docs/README.md`)
+
+## Pipeline stages → skills
+
+| Stage | Skill |
+|---|---|
+| Brainstorm | `superpowers:brainstorming` |
+| Plan | `superpowers:writing-plans` |
+| Plan review | `superpowers:improving-plans` |
+| Task creation | `task-creation` (project) |
+| Task enrichment | `task-enrichment` (project) |
+| Implementation | `superpowers:subagent-driven-development` + a team from `.claude/teams/` |
+| Code review | `superpowers:reviewing-code` |
+| QA (UI/UX) | `qa-standard` (project) |
+| Evals (agent quality) | `evals-promptfoo` (project) |
+| Learnings | `superpowers:remembering-learnings` |
+
+## Hard rules
+
+- `bd` always with `--no-daemon`.
+- `bun.lock` is text (never commit `bun.lockb`).
+- SvelteKit adapter runtime is `experimental_bun1.x`.
+- Zod 4: use `z.strictObject()`, never `.strict()`.
+- Vite 8: use `rolldownOptions`, never `rollupOptions`.
+- Only the orchestrator spawns teams. No team spawns another team.
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .claude/skills/using-this-repo
+git commit -m "feat(skills): using-this-repo session-orientation skill"
+```
+
+---
+
+### Task 15: Project skill — `beads-recipes`
+
+**Files:**
+- Create: `.claude/skills/beads-recipes/SKILL.md`
+
+- [ ] **Step 1: Write the skill**
+
+```markdown
+---
+name: beads-recipes
+description: Use when you need to query, create, or transition beads (`bd`) issues, or when you need a parallel-track plan via `bv`. Provides the canonical commands so they don't drift across the repo.
+---
+
+# Beads recipes
+
+Always invoke `bd` with `--no-daemon` — this repo runs across worktrees.
+
+## Queries
+
+| Intent | Command |
+|---|---|
+| What's claimable now | `bd --no-daemon ready` |
+| Parallel-track plan (JSON) | `bv --robot-plan` |
+| Priority recommendations (JSON) | `bv --robot-priority` |
+| Graph metrics (JSON) | `bv --robot-insights` |
+| Diff since a commit/date | `bv --robot-diff --diff-since <ref>` |
+| Single issue detail | `bd --no-daemon show <id>` |
+
+## Creation
+
+```bash
+bd --no-daemon create \
+  --title "<imperative title>" \
+  --kind {feature,bug,chore,qa-defect,review-action} \
+  --label "team:<team-name>" \
+  --label "gate:<qa|evals|review>" \
+  --status proposed
+```
+
+## Transitions
+
+| From → To | When |
+|---|---|
+| `proposed` → `enriched` | After `task-enrichment` adds acceptance criteria + team label |
+| `enriched` → `ready` | After orchestrator confirms dependencies wired |
+| `ready` → `in_progress` | Team claims, sets `owner` |
+| `in_progress` → `in_review` | Implementation complete, awaiting review/QA/evals |
+| `in_review` → `closed` | All declared gates passed |
+
+Use: `bd --no-daemon update <id> --status <new-status>`
+
+## Dependencies
+
+```bash
+# A blocks B (B can't start until A closes)
+bd --no-daemon dep add --blocker <A> --blocked <B>
+```
+
+## Worktrees
+
+Every implementation issue gets its own worktree. The orchestrator creates it,
+spawns the team, merges on close. Pattern:
+
+```bash
+git worktree add ../wt-<issue-id> -b feat/<issue-id>-<slug> main
+# ... team works ...
+git worktree remove ../wt-<issue-id>
+```
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .claude/skills/beads-recipes
+git commit -m "feat(skills): beads-recipes (canonical bd/bv commands)"
+```
+
+---
+
+### Task 16: Project skill — `task-creation`
+
+**Files:**
+- Create: `.claude/skills/task-creation/SKILL.md`
+
+- [ ] **Step 1: Write the skill**
+
+```markdown
+---
+name: task-creation
+description: Use immediately after `superpowers:writing-plans` (or its review) produces an approved plan in `docs/plans/`. Converts each plan task into a `bd` issue with status `proposed`, with dependency edges matching the plan's task order.
+---
+
+# Task creation
+
+Input: an approved plan at `docs/plans/YYYY-MM-DD-<slug>.md`.
+Output: one `bd` issue per plan task, in status `proposed`, with deps wired.
+
+## Procedure
+
+1. **Read the plan.** Identify each `### Task N: <name>` heading.
+2. **Create one bd issue per task** (in order, so IDs follow plan order):
+
+   ```bash
+   bd --no-daemon create \
+     --title "<plan-task-title>" \
+     --kind feature \
+     --status proposed \
+     --body "Plan: docs/plans/<slug>.md\nTask: <N>"
+   ```
+
+3. **Wire dependencies.** If Task N+1 depends on Task N (default), add an edge:
+
+   ```bash
+   bd --no-daemon dep add --blocker <id-of-N> --blocked <id-of-N+1>
+   ```
+
+4. **Do not enrich.** Acceptance criteria, team labels, and affected files
+   are added in the `task-enrichment` stage. Leave them empty here.
+
+5. **Report.** Output the list of created issue IDs (lowest → highest) and a
+   one-line summary of dependency edges.
+
+## Guardrails
+
+- Do **not** assign owners.
+- Do **not** transition to `enriched` or `ready`.
+- Do **not** start implementation.
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .claude/skills/task-creation
+git commit -m "feat(skills): task-creation (plan -> bd issues, proposed)"
+```
+
+---
+
+### Task 17: Project skill — `task-enrichment`
+
+**Files:**
+- Create: `.claude/skills/task-enrichment/SKILL.md`
+
+- [ ] **Step 1: Write the skill**
+
+```markdown
+---
+name: task-enrichment
+description: Use after `task-creation` has populated `bd` with `proposed` issues. Walks the plan and adds acceptance criteria, affected files, a `team:` label, and any `gate:` labels per issue. Transitions each enriched issue to status `enriched`.
+---
+
+# Task enrichment
+
+Input: `proposed` `bd` issues that map 1:1 to plan tasks.
+Output: same issues, now with rich bodies + labels, transitioned to `enriched`.
+
+## Per-issue procedure
+
+For each `proposed` issue (use `bd --no-daemon list --status proposed --json`):
+
+1. **Re-read the source plan task.**
+2. **Pick a team** by matching the affected paths to `.claude/teams/<team>.md` `owned paths:`
+   - `apps/web/**` → `frontend-impl-team`
+   - `packages/agent/**` → `agent-impl-team`
+   - `packages/schemas/**` → `schemas-team`
+   - `packages/qa/**` → either `qa-team` (cases) or `frontend-impl-team` (helpers); ask if ambiguous
+   - `packages/evals/**` → `evals-team`
+   - workflow / `.claude/**` / `docs/**` / CI / scaffolding → `orchestrator`
+3. **Pick gates** based on stage type:
+   - UI/UX user-facing change → `gate:qa`
+   - Agent/prompt/tool change → `gate:evals`
+   - All non-trivial code → `gate:review`
+4. **Write enriched body**, replacing the original:
+
+   ```
+   ## Acceptance criteria
+   - [criterion 1]
+   - [criterion 2]
+
+   ## Affected files
+   - path/to/file.ts (create | modify | delete)
+
+   ## Suggested skills
+   - <skill-name>
+   - <skill-name>
+
+   ## Plan reference
+   docs/plans/<slug>.md — Task <N>
+   ```
+
+5. **Apply labels:**
+
+   ```bash
+   bd --no-daemon update <id> \
+     --label "team:<chosen-team>" \
+     --label "gate:review" \
+     --label "gate:qa-or-evals-if-applicable" \
+     --body "<enriched-body>" \
+     --status enriched
+   ```
+
+## Stop condition
+
+When `bd --no-daemon list --status proposed` returns empty.
+
+## Guardrails
+
+- Do **not** transition past `enriched`. Orchestrator moves issues to `ready`.
+- If acceptance criteria cannot be inferred from the plan task, escalate to the user — do not invent them.
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .claude/skills/task-enrichment
+git commit -m "feat(skills): task-enrichment (proposed -> enriched bd issues)"
+```
+
+---
+
+### Task 18: Project skill — `qa-standard`
+
+**Files:**
+- Create: `.claude/skills/qa-standard/SKILL.md`
+
+- [ ] **Step 1: Write the skill**
+
+```markdown
+---
+name: qa-standard
+description: Use to run end-to-end QA against the deployed (or locally previewed) URL-Cheat-Sheet app. Required for any `bd` issue labeled `gate:qa`. Strict 4-step loop — the QA agent never fixes defects, it only files them.
+---
+
+# QA standard
+
+The only sanctioned QA shape in this repo. Use the `claude-in-chrome` MCP for
+browser interaction.
+
+## 1. Plan
+
+If a reusable case for this feature exists at `docs/qa/cases/<feature>.md`,
+use it. Otherwise create one. The case file is YAML conforming to
+`packages/schemas/src/qa-case.ts` (`qaCaseSchema`):
+
+```yaml
+name: <feature-slug>
+setup:
+  - "set env X=Y"
+steps:
+  - { action: navigate, target: "/" }
+  - { action: click, target: "[data-testid=start]" }
+  - { action: type, target: "input[name=url]", value: "https://example.com" }
+assertions:
+  - "chat panel renders within 2s"
+  - "no console errors"
+dataDependencies: []
+```
+
+Save as `docs/qa/cases/<feature>.md` (front-matter + the YAML in a fenced block).
+
+## 2. Run
+
+Invoke the case via `claude-in-chrome` tools, in order:
+
+1. `tabs_create_mcp` → open the preview URL
+2. For each step: `navigate` / `find` + `form_input` / `javascript_tool`
+3. After each step: `read_console_messages` (look for errors), `read_network_requests` (look for non-2xx)
+4. At each assertion checkpoint: take a screenshot via `gif_creator` or `upload_image`
+
+## 3. Report
+
+Write `docs/qa/reports/YYYY-MM-DD-<feature>.md`:
+
+```markdown
+# QA Report — <feature> — <date>
+
+**Case:** ../cases/<feature>.md
+**Preview URL:** <url>
+**Run by:** <agent or human>
+
+## Results
+| # | Assertion | Pass/Fail |
+|---|---|---|
+| 1 | <assertion> | ✅ |
+| 2 | <assertion> | ❌ |
+
+## Console errors
+- `<line>` (page <route>)
+
+## Failed network requests
+- `<method> <url>` → `<status>`
+
+## Screenshots
+- step-1: <path>
+- step-2: <path>
+
+## Defects filed
+- bd-<id> — <one-line summary>
+```
+
+## 4. File defects
+
+For each failed assertion, create a `bd` issue:
+
+```bash
+bd --no-daemon create \
+  --title "QA defect: <one-line>" \
+  --kind qa-defect \
+  --label "gate:review" \
+  --body "Report: docs/qa/reports/YYYY-MM-DD-<feature>.md#<anchor>\nRepro: <steps>"
+
+bd --no-daemon dep add --blocker <defect-id> --blocked <parent-feature-id>
+```
+
+## Stop conditions
+
+Loop ends when **either** all assertions pass **or** all failures have a filed defect. Never both partially done.
+
+## Guardrails
+
+- **Do not fix defects.** That belongs to the implementation team in a subsequent loop.
+- **Do not trigger JS `alert`/`confirm` dialogs** — they freeze the chrome MCP session.
+- If chrome MCP fails 2-3 times, stop and ask the user.
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .claude/skills/qa-standard
+git commit -m "feat(skills): qa-standard (the only sanctioned QA loop)"
+```
+
+---
+
+### Task 19: Project skill — `evals-promptfoo`
+
+**Files:**
+- Create: `.claude/skills/evals-promptfoo/SKILL.md`
+
+- [ ] **Step 1: Write the skill**
+
+```markdown
+---
+name: evals-promptfoo
+description: Use to author or run an evaluation suite for any agent-quality concern (prompts, tools, judgment quality). Required for any `bd` issue labeled `gate:evals`. Uses promptfoo as the runner and snapshots results into `docs/evals/`.
+---
+
+# Evals (promptfoo)
+
+For agent-quality features only. UI/UX → `qa-standard`.
+
+## Authoring a new suite
+
+1. Create the suite directory:
+
+   ```
+   packages/evals/suites/<suite-name>/
+     promptfooconfig.yaml
+     cases.jsonl
+   ```
+
+2. **`promptfooconfig.yaml` shape:**
+
+   ```yaml
+   description: <what this suite measures>
+   prompts:
+     - file://prompts/<prompt-name>.md
+   providers:
+     - id: anthropic:claude-sonnet-4-6
+   tests: file://cases.jsonl
+   defaultTest:
+     assert:
+       - type: llm-rubric
+         provider: anthropic:claude-sonnet-4-6
+         value: <rubric in plain text>
+   ```
+
+3. **`cases.jsonl` shape** — one JSON object per line:
+
+   ```jsonl
+   {"vars": {"input": "..."}, "assert": [{"type": "contains", "value": "..."}]}
+   ```
+
+4. **Judge prompts** (LLM-as-judge) live at `packages/evals/judges/<name>.md`,
+   validated by a Zod schema in `packages/schemas/`.
+
+## Running
+
+```bash
+bun run eval <suite-name>
+```
+
+This wraps `promptfoo eval` and writes a snapshot to
+`docs/evals/<suite-name>-YYYY-MM-DD.md`.
+
+## When to run
+
+- **Automatic in CI** when a PR touches `packages/agent/**` or `packages/evals/**`.
+- **On-demand** for any `bd` issue with `gate:evals`.
+
+## Snapshot interpretation
+
+- Top-level pass rate < 95% on a suite that previously passed 100% → regression. File a `bd` issue with `kind:bug` and `gate:evals` blocking the parent.
+- New failures on never-before-seen cases → triage: is the case wrong, or the agent wrong?
+
+## Guardrails
+
+- Do **not** add cases that depend on external network state that could flake.
+- Do **not** commit secrets in `cases.jsonl` — use env interpolation.
+- Snapshot files are committed; they're the regression baseline.
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .claude/skills/evals-promptfoo
+git commit -m "feat(skills): evals-promptfoo (suite authoring + snapshot runner)"
+```
+
+---
+
+### Task 20: Project skill — `svelte-frontend`
+
+**Files:**
+- Create: `.claude/skills/svelte-frontend/SKILL.md`
+
+- [ ] **Step 1: Write the skill**
+
+```markdown
+---
+name: svelte-frontend
+description: Use after `superpowers:test-driven-development` whenever the task touches `apps/web/**` (Svelte 5 + runes). Adds Svelte-specific patterns for state, streaming chat, and testing.
+---
+
+# Svelte 5 frontend (runes era)
+
+This skill composes with — does not replace — `superpowers:test-driven-development`.
+Write tests first, then apply these patterns.
+
+## State
+
+| Need | Use |
+|---|---|
+| Component-local mutable | `$state(initial)` |
+| Computed from other state | `$derived(expr)` or `$derived.by(() => ...)` |
+| Component inputs | `$props()` (with optional Zod validation at the boundary) |
+| Side effects | `$effect(() => { ... })` (cleanup via returned fn) |
+| Truly cross-component shared state | `writable` from `svelte/store` (only when runes can't reach) |
+
+**Rule:** prefer runes over stores. Reach for `writable` only when the state
+must live outside any component tree.
+
+## Streaming chat (Vercel AI SDK v6 + `@ai-sdk/svelte`)
+
+- Server: `+server.ts` returns the result of `streamText(...).toDataStreamResponse()`.
+- Client: import `Chat` from `@ai-sdk/svelte`, instantiate it in a `.svelte` file's `<script>`, and bind `chat.messages` reactively.
+- Always set `maxSteps` (or `stopWhen`) on `streamText` calls that use tools — otherwise the model calls the tool and never produces final text.
+
+## Testing
+
+- Unit (logic): Vitest 4, `bun --filter @url-cheat-sheet/web test`.
+- Component: `@testing-library/svelte` + jsdom.
+- Endpoint handlers: import the `GET`/`POST` from `+server.ts` and call directly.
+- Don't mock SvelteKit's `json()` helper — it's free to use in tests.
+
+## Common pitfalls
+
+- **`$state` in `.ts` files** requires the `.svelte.ts` extension or it won't compile.
+- **`$props()` destructuring** must happen at the top of `<script>`, not inside a function.
+- **Vite 8** uses Rolldown — never edit `rollupOptions`, use `rolldownOptions`.
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .claude/skills/svelte-frontend
+git commit -m "feat(skills): svelte-frontend (Svelte 5 runes patterns + AI SDK Chat)"
+```
+
+---
+
+## Phase G — Team Specs
+
+### Task 21: Write all 7 team specs
+
+**Files:**
+- Create: `.claude/teams/orchestrator.md`
+- Create: `.claude/teams/frontend-impl-team.md`
+- Create: `.claude/teams/agent-impl-team.md`
+- Create: `.claude/teams/schemas-team.md`
+- Create: `.claude/teams/review-team.md`
+- Create: `.claude/teams/qa-team.md`
+- Create: `.claude/teams/evals-team.md`
+
+Every team spec follows the same template — copy and customize.
+
+- [ ] **Step 1: Write `.claude/teams/orchestrator.md`**
+
+```markdown
+# Team: orchestrator
+
+**Owned paths:** none (cross-cutting)
+**Skills:** `superpowers:subagent-driven-development`, `beads-recipes`, `using-this-repo`
+
+## Handoff in
+
+Triggered manually by the user or by a slash command (`/claim-next`). Reads
+`bd --no-daemon ready` and picks the highest-priority issue (`bv --robot-priority`).
+
+## Handoff out
+
+- Per issue: create a worktree (`git worktree add ../wt-<id> -b feat/<id>-<slug> main`).
+- Spawn the team named in the issue's `team:` label.
+- After the team reports success, run any required gates (review, qa, evals).
+- Transition the issue: `ready` → `in_progress` → `in_review` → `closed`.
+- Merge the worktree branch into main and remove the worktree.
+
+## Escalation rules
+
+- Ambiguous team routing → ask the user.
+- Failing gate after 2 fix loops → ask the user.
+- Conflicting bd dependencies → ask the user.
+
+## Hard rule
+
+**Only the orchestrator spawns teams.** No team spawns another team.
+```
+
+- [ ] **Step 2: Write `.claude/teams/frontend-impl-team.md`**
+
+```markdown
+# Team: frontend-impl-team
+
+**Owned paths:** `apps/web/**`, `packages/qa/src/page-objects/**` (when added)
+**Skills:** `svelte-frontend`, `superpowers:test-driven-development`, `superpowers:testing`
+
+## Handoff in
+
+Claims `bd` issues with `team:frontend-impl-team` in status `ready`.
+
+## Handoff out
+
+- Working code, tests passing locally (`bun --filter @url-cheat-sheet/web test`).
+- Commits follow the conventional-commit style from `superpowers:committing`.
+- Transitions issue to `in_review`, leaves it for orchestrator to run gates.
+
+## Escalation rules
+
+- New cross-package surface needed → ask `schemas-team` to add a schema first; do not invent inline types.
+- Streaming changes that touch `packages/agent/**` → escalate to orchestrator; the agent team owns that path.
+```
+
+- [ ] **Step 3: Write `.claude/teams/agent-impl-team.md`**
+
+```markdown
+# Team: agent-impl-team
+
+**Owned paths:** `packages/agent/**`
+**Skills:** `superpowers:test-driven-development`, `superpowers:testing`, `claude-api` (if available), `evals-promptfoo`
+
+## Handoff in
+
+Claims `bd` issues with `team:agent-impl-team` in status `ready`.
+
+## Handoff out
+
+- Tests passing (`bun --filter @url-cheat-sheet/agent test`).
+- If the change is non-trivial, an eval suite update under `packages/evals/suites/`.
+- Transitions issue to `in_review`.
+
+## Escalation rules
+
+- Schema changes → coordinate with `schemas-team` first.
+- Frontend integration changes → escalate to orchestrator.
+```
+
+- [ ] **Step 4: Write `.claude/teams/schemas-team.md`**
+
+```markdown
+# Team: schemas-team
+
+**Owned paths:** `packages/schemas/**`
+**Skills:** `superpowers:test-driven-development`, `superpowers:testing`
+
+## Handoff in
+
+Claims `bd` issues with `team:schemas-team`.
+
+## Handoff out
+
+- New/changed Zod schemas with unit tests.
+- Downstream consumers updated in the same commit set when breaking.
+- Transitions issue to `in_review`.
+
+## Escalation rules
+
+- Breaking schema change with > 2 downstream consumers → escalate to orchestrator for a coordinated rollout.
+```
+
+- [ ] **Step 5: Write `.claude/teams/review-team.md`**
+
+```markdown
+# Team: review-team
+
+**Owned paths:** none (reviews branches it does not own)
+**Skills:** `superpowers:reviewing-code`
+
+## Handoff in
+
+Triggered when an issue moves to `in_review` with `gate:review`.
+
+## Handoff out
+
+- A review report at `docs/reviews/YYYY-MM-DD-<slug>.md`.
+- For each blocking comment, a `bd` issue with `kind:review-action`, `blocks` the parent.
+- Transitions parent issue to `closed` only if all action items closed.
+
+## Escalation rules
+
+- Architectural concerns out of scope of the PR → file a separate `bd` issue tagged `kind:chore`, do not block the current review.
+```
+
+- [ ] **Step 6: Write `.claude/teams/qa-team.md`**
+
+```markdown
+# Team: qa-team
+
+**Owned paths:** `docs/qa/cases/**`, `docs/qa/reports/**`, `packages/qa/src/case-loader.ts`
+**Skills:** `qa-standard`, `agent-browser` (if available)
+
+## Handoff in
+
+Triggered when an issue moves to `in_review` with `gate:qa`. Also handles
+direct `gate:qa` runs against deployed previews.
+
+## Handoff out
+
+- `docs/qa/reports/YYYY-MM-DD-<feature>.md`.
+- Defect `bd` issues for each failure, blocking the parent feature.
+- Transitions parent only if all defects close.
+
+## Escalation rules
+
+- Chrome MCP fails 2-3 times → stop, ask the user.
+- Case file ambiguous → ask the feature owner.
+
+## Guardrail
+
+This team **does not fix defects.** Implementation teams do.
+```
+
+- [ ] **Step 7: Write `.claude/teams/evals-team.md`**
+
+```markdown
+# Team: evals-team
+
+**Owned paths:** `packages/evals/**`, `docs/evals/**`
+**Skills:** `evals-promptfoo`, `superpowers:test-driven-development`
+
+## Handoff in
+
+Triggered when an issue moves to `in_review` with `gate:evals`, or via direct
+request to author a new suite.
+
+## Handoff out
+
+- New/updated suite under `packages/evals/suites/`.
+- Snapshot at `docs/evals/<suite>-YYYY-MM-DD.md`.
+- For regressions, a `bd` issue with `kind:bug`, `gate:evals`, blocking the parent.
+
+## Escalation rules
+
+- Regression unclear (judge prompt may be wrong) → escalate to the issue owner.
+```
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add .claude/teams
+git commit -m "feat(teams): 7 team specs (orchestrator + 6 impl/review/qa/evals)
+
+Each team declares owned paths, skills, handoff protocol, and escalation
+rules. Only the orchestrator spawns teams — flat dependency graph."
+```
+
+---
+
+## Phase H — Slash Commands + Settings
+
+### Task 22: `.claude/commands/` + `.claude/settings.json`
+
+**Files:**
+- Create: `.claude/commands/pipeline-status.md`
+- Create: `.claude/commands/claim-next.md`
+- Create: `.claude/settings.json`
+
+- [ ] **Step 1: Write `.claude/commands/pipeline-status.md`**
+
+```markdown
+---
+description: Print a snapshot of the agentic pipeline — current bd ready queue, in-progress issues, and any blocking gates.
+---
+
+Run these commands in order and summarize the output for the user:
+
+1. `bd --no-daemon ready` — what's claimable
+2. `bd --no-daemon list --status in_progress` — what's being worked on
+3. `bd --no-daemon list --status in_review` — what's pending review/qa/evals
+4. `bv --robot-priority` — recommended next pick
+
+End with: "Top recommended pick: <id> — <title> (reason: <why>)".
+```
+
+- [ ] **Step 2: Write `.claude/commands/claim-next.md`**
+
+```markdown
+---
+description: Orchestrator entrypoint. Picks the top-priority ready bd issue, creates a worktree, and spawns the team named in the issue's `team:` label.
+---
+
+1. Invoke the `using-this-repo` skill (always first).
+2. Read `bv --robot-priority` and pick the top issue with status `ready`.
+3. Extract the `team:<name>` label.
+4. Create a worktree: `git worktree add ../wt-<id> -b feat/<id>-<slug> main`.
+5. Spawn the named team using `superpowers:subagent-driven-development`, passing the issue ID and worktree path.
+6. After the team reports success, run gates declared on the issue (`gate:review`, `gate:qa`, `gate:evals`).
+7. On all gates green, transition the issue to `closed`, merge the branch, remove the worktree.
+8. Report the final status to the user.
+
+If any step fails twice, stop and ask the user.
+```
+
+- [ ] **Step 3: Write `.claude/settings.json`**
+
+```json
+{
+  "$schema": "https://docs.claude.com/en/api/claude-code/settings-schema.json",
+  "permissions": {
+    "allow": [
+      "Bash(bun:*)",
+      "Bash(bd --no-daemon:*)",
+      "Bash(bv:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git worktree:*)",
+      "Bash(npx promptfoo:*)",
+      "Bash(bunx promptfoo:*)"
+    ]
+  }
+}
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add .claude/commands .claude/settings.json
+git commit -m "feat(claude): slash commands (pipeline-status, claim-next) + settings
+
+Pre-approves read-only bd/bun/git/git-worktree commands so the
+orchestrator doesn't prompt on every recipe call."
+```
+
+---
+
+## Phase I — CI/CD
+
+### Task 23: `.github/workflows/ci.yml`
+
+**Files:**
+- Create: `.github/workflows/ci.yml`
+
+- [ ] **Step 1: Write the workflow**
+
+```yaml
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    outputs:
+      agent-touched: ${{ steps.changes.outputs.agent }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            agent:
+              - 'packages/agent/**'
+              - 'packages/evals/**'
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - uses: actions/cache/save@v4
+        with:
+          path: |
+            node_modules
+            **/node_modules
+          key: bun-${{ hashFiles('bun.lock') }}
+
+  typecheck:
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version-file: package.json
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            **/node_modules
+          key: bun-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+
+  lint:
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+
+  test:
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bun run test
+
+  build:
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+
+  eval-gate:
+    needs: install
+    if: needs.install.outputs.agent-touched == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Run canary eval
+        run: bun run eval canary
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .github/workflows/ci.yml
+git commit -m "ci: ci.yml (typecheck + lint + test + build + conditional eval-gate)
+
+Bun via oven-sh/setup-bun@v2.2.0 reading engines.bun from package.json.
+eval-gate runs only when packages/agent/** or packages/evals/** touched."
+```
+
+---
+
+### Task 24: `.github/workflows/qa.yml`, `release.yml`, `outdated.yml`
+
+**Files:**
+- Create: `.github/workflows/qa.yml`
+- Create: `.github/workflows/release.yml`
+- Create: `.github/workflows/outdated.yml`
+
+- [ ] **Step 1: Write `.github/workflows/qa.yml`**
+
+```yaml
+name: QA
+
+on:
+  workflow_dispatch:
+    inputs:
+      bd-issue:
+        description: 'bd issue id (e.g. bd-a1b2)'
+        required: true
+      preview-url:
+        description: 'Vercel preview URL to run QA against'
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Placeholder — manual QA invocation
+        run: |
+          echo "Issue: ${{ inputs.bd-issue }}"
+          echo "Preview: ${{ inputs.preview-url }}"
+          echo "Real QA runs locally via the qa-standard skill + claude-in-chrome MCP."
+          echo "This workflow currently records intent + posts a comment placeholder."
+```
+
+> **Note for implementers:** the QA loop runs in Claude Code locally via the `qa-standard` skill because GitHub-hosted runners cannot drive the user's chrome extension. This workflow exists to record QA intent in CI and post comments. If we later migrate to a CI-side browser (Playwright + recorded fixtures), revise this workflow.
+
+- [ ] **Step 2: Write `.github/workflows/release.yml`**
+
+```yaml
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Note
+        run: |
+          echo "Vercel auto-deploys on push to main via its Git integration."
+          echo "This workflow is a placeholder for future release notes / tagging."
+```
+
+- [ ] **Step 3: Write `.github/workflows/outdated.yml`**
+
+```yaml
+name: Outdated
+
+on:
+  schedule:
+    - cron: '0 9 * * 1' # Mondays 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Check for outdated deps
+        run: |
+          bun outdated --json > outdated.json || true
+          if [ -s outdated.json ] && [ "$(jq 'length' outdated.json)" -gt 0 ]; then
+            echo "Outdated deps detected — see outdated.json artifact."
+            cat outdated.json
+            # In future: file a bd chore issue via gh CLI + bd-recipes.sh
+            exit 0
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: outdated-deps
+          path: outdated.json
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add .github/workflows/qa.yml .github/workflows/release.yml .github/workflows/outdated.yml
+git commit -m "ci: qa.yml + release.yml + outdated.yml
+
+qa.yml is a placeholder (real QA runs locally via claude-in-chrome).
+release.yml is a placeholder (Vercel auto-deploys via Git integration).
+outdated.yml runs bun outdated weekly as a Renovate safety net."
+```
+
+---
+
+## Phase J — Renovate + ADRs + Top-level Docs
+
+### Task 25: `renovate.json`
+
+**Files:**
+- Create: `renovate.json`
+
+- [ ] **Step 1: Write the config**
+
+```json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits"
+  ],
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": { "enabled": true, "schedule": ["before 6am on monday"] },
+  "packageRules": [
+    {
+      "description": "Group AI SDK packages",
+      "matchPackagePatterns": ["^ai$", "^@ai-sdk/"],
+      "groupName": "ai-sdk"
+    },
+    {
+      "description": "Group Svelte stack",
+      "matchPackagePatterns": ["^svelte$", "^@sveltejs/", "^prettier-plugin-svelte$", "^eslint-plugin-svelte$"],
+      "groupName": "svelte-stack"
+    },
+    {
+      "description": "Group dev tooling",
+      "matchPackagePatterns": ["^typescript$", "^eslint", "^prettier", "^vitest", "^@vitest/", "^vite$"],
+      "groupName": "dev-tools"
+    },
+    {
+      "description": "Auto-merge patch + dev-only minors after CI green",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    },
+    {
+      "description": "Pin exact for 0.x packages",
+      "matchCurrentVersion": "/^0\\./",
+      "rangeStrategy": "pin"
+    }
+  ]
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add renovate.json
+git commit -m "chore(deps): renovate.json with grouped majors + patch auto-merge
+
+Groups AI SDK / Svelte / dev-tools so PR review surface stays sane.
+0.x packages pinned exact (promptfoo). See ADR 0003 for why Renovate."
+```
+
+---
+
+### Task 26: Author all 4 ADRs
+
+**Files:**
+- Create: `docs/adr/0001-bun-on-vercel.md`
+- Create: `docs/adr/0002-eslint-over-biome.md`
+- Create: `docs/adr/0003-renovate-over-dependabot.md`
+- Create: `docs/adr/0004-vendored-superpowers.md`
+
+- [ ] **Step 1: Write `docs/adr/0001-bun-on-vercel.md`**
+
+```markdown
+# 0001 — Bun runtime on Vercel (experimental)
+
+**Status:** Accepted
+**Date:** 2026-05-17
+
+## Context
+
+We use Bun for local dev and want a single runtime end-to-end. Vercel's
+SvelteKit adapter (`@sveltejs/adapter-vercel@^6.3.3`) supports Bun via
+`runtime: 'experimental_bun1.x'` but explicitly flags it as not for
+production.
+
+## Decision
+
+Use `runtime: 'experimental_bun1.x'` in production today. Keep all server
+code Web-standard (no Node-only APIs that lack Bun parity) so we can flip
+the runtime string without a rewrite.
+
+## Fallback procedure
+
+If the experimental runtime misbehaves in production:
+
+1. In `apps/web/svelte.config.js`, change `runtime: 'experimental_bun1.x'`
+   to `runtime: 'nodejs24.x'`.
+2. Add `"nodeVersion": "24.x"` to `vercel.json` and remove `"bunVersion"`.
+3. Verify locally: `bun run build` still passes (we are not switching local
+   dev, only the Vercel runtime).
+4. Open a PR titled `revert(runtime): nodejs24.x fallback per ADR 0001`.
+
+## Consequences
+
+- We accept production risk from an explicitly experimental Vercel feature.
+- We commit to keeping code Web-standard.
+- We monitor [vercel/next.js#…](https://github.com/sveltejs/kit/issues/14879)
+  and revisit when Bun-on-Vercel exits experimental.
+```
+
+- [ ] **Step 2: Write `docs/adr/0002-eslint-over-biome.md`**
+
+```markdown
+# 0002 — ESLint 10 over Biome 2 for lint/format
+
+**Status:** Accepted
+**Date:** 2026-05-17
+
+## Context
+
+Biome 2.4 has matured into a credible all-in-one ESLint+Prettier replacement
+with type-aware rules and ~15-50x speed. However, its Svelte rule coverage
+is thinner than ESLint's, particularly for runes-aware checks.
+
+## Decision
+
+Use ESLint 10 + `eslint-plugin-svelte` + Prettier 3.8.
+
+## Revisit when
+
+`eslint-plugin-svelte`'s runes-aware rules are matched by Biome's Svelte
+support. At that point, run a 1-week trial of Biome and switch if it holds.
+```
+
+- [ ] **Step 3: Write `docs/adr/0003-renovate-over-dependabot.md`**
+
+```markdown
+# 0003 — Renovate over Dependabot
+
+**Status:** Accepted
+**Date:** 2026-05-17
+
+## Context
+
+Dependabot gained Bun support in Feb 2025 (text `bun.lock` only), but has
+known issues with Bun + npm workspaces (e.g. dependabot-core#14223). Renovate
+has had Bun support longer, handles monorepo workspaces more reliably, and
+exposes richer grouping / auto-merge policy.
+
+## Decision
+
+Use Renovate (`renovate.json`). Group AI SDK, Svelte stack, and dev tools.
+Auto-merge patch updates. Pin 0.x packages exactly.
+
+## Consequences
+
+- Requires the Renovate GitHub App installed on the repo.
+- Dependabot is disabled (no `.github/dependabot.yml`).
+- Weekly `bun outdated` cron acts as a safety net (see `.github/workflows/outdated.yml`).
+```
+
+- [ ] **Step 4: Write `docs/adr/0004-vendored-superpowers.md`**
+
+```markdown
+# 0004 — Vendor obra/superpowers in-tree
+
+**Status:** Accepted
+**Date:** 2026-05-17
+
+## Context
+
+The superpowers plugin defines the spine of our agentic workflow. We want
+the option to edit any skill in-place when an upstream skill is wrong for
+our case, without forking the whole plugin or losing the ability to ship.
+
+## Decision
+
+Vendor `obra/superpowers@v5.1.0` into `.claude/plugins/superpowers/`. The
+exact source version lives in `VENDORED_VERSION` for upgrade tracking.
+
+## Upgrade procedure
+
+1. Read upstream release notes for new tag.
+2. Re-run the vendor copy (per Plan Task 13).
+3. Update `VENDORED_VERSION`.
+4. Run the full CI + a smoke session that exercises brainstorming →
+   writing-plans to confirm nothing local broke.
+
+## Consequences
+
+- We own all upgrades (no automatic plugin updates).
+- Project skills under `.claude/skills/` continue to override by name and
+  remain unaffected by upgrades.
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add docs/adr/0001-bun-on-vercel.md docs/adr/0002-eslint-over-biome.md docs/adr/0003-renovate-over-dependabot.md docs/adr/0004-vendored-superpowers.md
+git commit -m "docs(adr): 0001-0004 (bun-on-vercel, eslint, renovate, vendored superpowers)"
+```
+
+---
+
+### Task 27: `scripts/bd-recipes.sh` + `scripts/snapshot-eval.ts`
+
+**Files:**
+- Create: `scripts/bd-recipes.sh`
+- Create: `scripts/snapshot-eval.ts`
+
+- [ ] **Step 1: Write `scripts/bd-recipes.sh`**
+
+```bash
+#!/usr/bin/env bash
+# Thin shell wrappers around the canonical bd/bv queries.
+# Mirrors the recipes in .claude/skills/beads-recipes/SKILL.md.
+set -euo pipefail
+
+case "${1:-help}" in
+  ready)
+    bd --no-daemon ready
+    ;;
+  in-progress)
+    bd --no-daemon list --status in_progress
+    ;;
+  review)
+    bd --no-daemon list --status in_review
+    ;;
+  plan)
+    bv --robot-plan
+    ;;
+  priority)
+    bv --robot-priority
+    ;;
+  *)
+    echo "Usage: $0 {ready|in-progress|review|plan|priority}"
+    exit 2
+    ;;
+esac
+```
+
+- [ ] **Step 2: Make executable**
+
+```bash
+chmod +x scripts/bd-recipes.sh
+```
+
+- [ ] **Step 3: Write `scripts/snapshot-eval.ts`** (shim that forwards to packages/evals)
+
+```ts
+#!/usr/bin/env bun
+import { spawnSync } from 'node:child_process';
+
+/**
+ * Repo-root shim: forwards to packages/evals/src/run.ts so contributors
+ * can run `bun scripts/snapshot-eval.ts <suite>` from anywhere.
+ */
+const suite = process.argv[2];
+if (!suite) {
+  console.error('Usage: bun scripts/snapshot-eval.ts <suite>');
+  process.exit(2);
+}
+const r = spawnSync('bun', ['packages/evals/src/run.ts', suite], { stdio: 'inherit' });
+process.exit(r.status ?? 1);
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add scripts/bd-recipes.sh scripts/snapshot-eval.ts
+git commit -m "chore(scripts): bd-recipes.sh wrapper + snapshot-eval shim"
+```
+
+---
+
+### Task 28: Top-level `CLAUDE.md` + rewrite `README.md`
+
+**Files:**
+- Modify: `README.md`
+- Create: `CLAUDE.md`
+
+- [ ] **Step 1: Read current README** (it's the original one-liner; we replace it)
+
+Run: `cat README.md`
+Expected: a stub.
+
+- [ ] **Step 2: Write the new `README.md`**
+
+```markdown
+# URL Cheat Sheet
+
+A web app where you drop a URL and chat with an agent that has read it.
+
+## What's here
+
+This repo is currently the **skeleton** — workflow infra, scaffolds, and CI.
+The app itself (URL fetch + chat agent) is the first feature, to be
+brainstormed using the workflow this skeleton ships.
+
+## Quick start
+
+```bash
+bun install
+bun run dev   # SvelteKit on http://localhost:5173
+```
+
+## Run all CI checks locally
+
+```bash
+bun run typecheck && bun run lint && bun run test && bun run build
+```
+
+## Layout
+
+- `apps/web/` — SvelteKit (Vercel target)
+- `packages/{schemas,agent,evals,qa}` — workspaces
+- `docs/` — specs, plans, reviews, QA, evals, ADRs (see `docs/README.md`)
+- `.claude/` — vendored superpowers, project skills, team specs
+- `.beads/` — task DB (run `bd` with `--no-daemon`)
+
+## For agents
+
+Read `CLAUDE.md` and invoke the `using-this-repo` skill first.
+
+## Stack
+
+Bun 1.3, TypeScript 6, SvelteKit 2.60 (Svelte 5 runes), Vite 8 + Rolldown,
+Vitest 4, Vercel AI SDK v6, Zod 4, promptfoo. ESLint 10 + Prettier 3.8.
+Deploy: Vercel with adapter-vercel `experimental_bun1.x` runtime.
+```
+
+- [ ] **Step 3: Write `CLAUDE.md`** (root, repo-wide agent instructions)
+
+```markdown
+# CLAUDE.md — URL-Cheat-Sheet repo
+
+## Always do first
+
+1. Invoke the **`using-this-repo`** skill. It tells you the geography,
+   the canonical workflow, and the hard rules.
+2. Check `bd --no-daemon ready` to see what's claimable.
+
+## Hard rules
+
+- `bd` always with `--no-daemon` (worktree-safe).
+- `bun.lock` is the lockfile — never commit `bun.lockb`.
+- SvelteKit adapter runtime: `experimental_bun1.x` (see ADR 0001).
+- Zod 4: `z.strictObject()`, never `.strict()`. Unified `error` param.
+- Vite 8 / Rolldown: `rolldownOptions`, never `rollupOptions`.
+- Only the orchestrator spawns teams.
+- QA team never fixes defects — files them only.
+
+## Workflow stages → skills (canonical)
+
+See `docs/specs/2026-05-17-agentic-workflow-skeleton.md` §8 for the table.
+
+## Doc conventions
+
+See `docs/README.md`. Every artifact has one home. No new folders without
+an ADR.
+
+## Code style
+
+- TS strict, `verbatimModuleSyntax`, ES2023 target.
+- Use JSDoc on exported functions and components.
+- Prefer runes over stores in Svelte components.
+- Composition over inheritance. Server-first, client when necessary.
+- No barrel files unless genuinely necessary.
+
+## Anti-patterns to refuse
+
+- Mocking external services that we own end-to-end (use real integration tests).
+- Premature abstractions before the third use.
+- Speculative generality / "just in case" code.
+- Skipping `--no-daemon` on `bd`.
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add README.md CLAUDE.md
+git commit -m "docs(root): rewrite README + add CLAUDE.md repo agent rules
+
+README orients humans, CLAUDE.md orients agents. CLAUDE.md surfaces
+hard rules (bd --no-daemon, bun.lock, runtime string, Zod 4 API,
+Vite 8 API) so they're enforced at session start."
+```
+
+---
+
+## Phase K — Final Smoke Test
+
+### Task 29: Install, run every CI check locally, verify green
+
+**Files:**
+- None — this is a verification task only.
+
+- [ ] **Step 1: Clean install from scratch**
+
+```bash
+rm -rf node_modules apps/*/node_modules packages/*/node_modules
+bun install
+```
+
+Expected: exits 0, `bun.lock` updated, no `bun.lockb` created.
+
+- [ ] **Step 2: Typecheck**
+
+Run: `bun run typecheck`
+Expected: exits 0.
+
+- [ ] **Step 3: Lint**
+
+Run: `bun run lint`
+Expected: exits 0.
+
+- [ ] **Step 4: Test**
+
+Run: `bun run test`
+Expected: exits 0, all suites pass (schemas: 4, agent: 1, qa: 2, web: 1 = 8 tests minimum).
+
+- [ ] **Step 5: Build**
+
+Run: `bun run build`
+Expected: exits 0. `apps/web/.vercel/output/` is created.
+
+- [ ] **Step 6: Dev server smoke**
+
+```bash
+bun run dev &
+sleep 5
+curl -sf http://localhost:5173/api/health
+kill %1 || pkill -f 'vite dev'
+```
+
+Expected: JSON `{"status":"ok","version":"0.0.0"}`.
+
+- [ ] **Step 7: Beads sanity**
+
+Run: `bd --no-daemon ready`
+Expected: lists the bootstrap chore issue from Task 12.
+
+- [ ] **Step 8: Update the bootstrap bd issue and close it**
+
+```bash
+BOOTSTRAP_ID=$(bd --no-daemon ready --json | jq -r '.[0].id')
+bd --no-daemon update "$BOOTSTRAP_ID" --status closed
+```
+
+- [ ] **Step 9: Commit smoke evidence**
+
+```bash
+git add .beads
+git commit -m "chore(beads): close bootstrap chore after skeleton smoke test green"
+```
+
+- [ ] **Step 10: Push and confirm CI green**
+
+```bash
+git push
+gh pr create --title "Skeleton complete" --body "$(cat <<'EOF'
+## Summary
+- Bun workspaces monorepo scaffolded per spec docs/specs/2026-05-17-agentic-workflow-skeleton.md
+- All workflow infra in place (vendored superpowers, project skills, team specs, beads, docs taxonomy)
+- CI gates wired (ci.yml, qa.yml, release.yml, outdated.yml)
+- ADRs 0001-0004 authored
+
+## Test plan
+- [x] bun install (clean)
+- [x] bun run typecheck
+- [x] bun run lint
+- [x] bun run test (8+ tests)
+- [x] bun run build
+- [x] /api/health responds 200
+- [x] bd --no-daemon ready works
+EOF
+)"
+```
+
+Expected: PR opened, all CI jobs (`typecheck`, `lint`, `test`, `build`) green. `eval-gate` is skipped (no agent paths changed in the PR diff itself).
+
+If CI fails: do not paper over. Investigate per `superpowers:systematic-debugging`. The skeleton is "done" only when CI is green per spec §15 criterion 3.
+
+---
+
+## Self-review notes (for the implementer)
+
+This plan implements every section of `docs/specs/2026-05-17-agentic-workflow-skeleton.md`:
+
+- §3 Stack — every pinned version surfaces in `package.json` files (Tasks 1, 4, 5, 6, 7, 8).
+- §4 Repo layout — Tasks 1-12 + 17-29 build the entire tree.
+- §5 Docs taxonomy — Task 11.
+- §6 Skill system — Tasks 13-20.
+- §7 Teams — Task 21.
+- §8 Workflow pipeline — encoded in `using-this-repo` (Task 14) and `CLAUDE.md` (Task 28).
+- §9 Beads workflow — Tasks 12, 15.
+- §10 QA standard — Task 18.
+- §11 Evals standard — Tasks 7, 19.
+- §12 CI/CD — Tasks 23, 24, 25.
+- §13 ADRs — Task 26.
+- §14 Deferred — explicitly out of scope.
+- §15 Success criteria — Task 29 verifies criterion 3 (CI green on trivial change); criteria 1, 2, 4, 5 are validated when the first real feature (the app) is brainstormed using this skeleton.
+
+**Hard rule reminders embedded in the plan:**
+- `bd --no-daemon` (Tasks 12, 14, 15, 16, 17, 18, 22, 27)
+- `bun.lock` not `bun.lockb` (Tasks 1, 14, 28)
+- `experimental_bun1.x` not `bun1.x` (Tasks 8, 26, 28)
+- `z.strictObject()` not `.strict()` (Tasks 4, 14, 28)
+- `rolldownOptions` not `rollupOptions` (Tasks 8, 14, 20, 28)

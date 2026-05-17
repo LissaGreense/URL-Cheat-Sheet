@@ -1,0 +1,12 @@
+description: Canary suite — proves the eval harness runs end-to-end.
+prompts:
+  - 'Echo the word HELLO and nothing else.'
+providers:
+  - id: echo
+    config:
+      type: echo
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: HELLO
