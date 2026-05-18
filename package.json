@@ -20,7 +20,7 @@
     "format": "prettier --write . && eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "eval": "bun --filter '@url-cheat-sheet/evals' run eval",
+    "eval": "bun --filter '@url-cheat-sheet/evals' eval",
     "bv": "bv"
   },
   "devDependencies": {

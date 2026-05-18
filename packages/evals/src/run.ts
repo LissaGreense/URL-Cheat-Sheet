@@ -1,7 +1,13 @@
 #!/usr/bin/env bun
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const packageRoot = resolve(scriptDir, '..');
+const repoRoot = resolve(packageRoot, '..', '..');
 
 /**
  * Runs a promptfoo suite and writes a snapshot to docs/evals/<suite>-<date>.md.
@@ -14,13 +20,13 @@ if (!suite) {
   process.exit(2);
 }
 
-const cfg = join('packages/evals/suites', suite, 'promptfooconfig.yaml');
+const cfg = join(packageRoot, 'suites', suite, 'promptfooconfig.yaml');
+const outputPath = join(tmpdir(), `promptfoo-${suite}-${Date.now()}.json`);
+
 const result = spawnSync(
   'bunx',
-  ['promptfoo', 'eval', '-c', cfg, '--no-cache', '--output', 'json'],
-  {
-    encoding: 'utf8'
-  }
+  ['promptfoo', 'eval', '-c', cfg, '--no-cache', '--output', outputPath],
+  { encoding: 'utf8' }
 );
 
 if (result.status !== 0) {
@@ -28,8 +34,15 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1);
 }
 
+let evalJson = '{}';
+try {
+  evalJson = readFileSync(outputPath, 'utf8').trim() || '{}';
+} finally {
+  rmSync(outputPath, { force: true });
+}
+
 const today = new Date().toISOString().slice(0, 10);
-const outDir = 'docs/evals';
+const outDir = join(repoRoot, 'docs/evals');
 mkdirSync(outDir, { recursive: true });
 const outFile = join(outDir, `${suite}-${today}.md`);
 
@@ -37,7 +50,7 @@ const snapshot = [
   `# Eval snapshot: ${suite} — ${today}`,
   '',
   '```json',
-  result.stdout.trim() || '{}',
+  evalJson,
   '```'
 ].join('\n');
 
