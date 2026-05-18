@@ -1,6 +1,6 @@
 # ADR 0005: Branch-first + branch protection for `main`
 
-**Status:** accepted
+**Status:** accepted (with revised enforcement mechanism — see Addendum 2026-05-18)
 **Date:** 2026-05-18
 **Spec:** [../specs/2026-05-18-agentic-pr-loop.md](../specs/2026-05-18-agentic-pr-loop.md)
 
@@ -30,3 +30,40 @@ The agentic pipeline assumes every change flows through review / QA / evals gate
 - **GitHub-only enforcement** (require approving reviews, no bd coupling): rejected because it forces every PR to wait for a GitHub-side review even when the bd-side gates already passed. Doubles the wait without adding signal.
 - **No branch protection, just convention**: rejected because the 2026-05-18 incident proved convention alone is insufficient against agentic mistakes.
 - **Dedicated GitHub App identity for the orchestrator**: deferred. Adds operational complexity. Tracked as future work in the spec's §9.
+
+## Addendum (2026-05-18): enforcement mechanism revised
+
+After merge of the agentic-PR-loop PR, applying the planned GitHub branch protection
+returned `403 — Upgrade to GitHub Pro or make this repository public to enable
+this feature` for both the classic `branches/main/protection` endpoint and the
+newer `rulesets` endpoint. GitHub gates server-side branch enforcement behind
+GitHub Pro for private repositories.
+
+Given the repo is private and on the free tier, we adopted a **local pre-push hook**
+as the active enforcement mechanism:
+
+- Hook source: [`../../scripts/git-hooks/pre-push`](../../scripts/git-hooks/pre-push)
+- Wired via: [`../../scripts/setup-git-hooks.sh`](../../scripts/setup-git-hooks.sh)
+  (one-shot per clone/worktree; sets `core.hooksPath`)
+
+Properties relative to the original GitHub-side plan:
+
+- ✅ Blocks `git push origin main` in any local environment where the hook is wired
+  (which includes all agent invocations of `git push` in this repo).
+- ✅ Version-controlled — the hook lives under `scripts/git-hooks/`, not in the
+  gitignored `.git/hooks/`.
+- ❌ Does NOT enforce on GitHub-side. If someone uses the web UI, the API, or pushes
+  from an unconfigured clone, the rule is not enforced.
+- ❌ Bypassable via `git push --no-verify` (this is deliberate — emergency escape
+  matches the original `enforce_admins: false` intent).
+
+**`scripts/branch-protection.json` is kept in the repo as a forward-looking
+artifact** — the exact payload to apply if the repo ever goes public or upgrades
+to Pro. See [`../../scripts/git-hooks/README.md`](../../scripts/git-hooks/README.md)
+for both paths.
+
+CI-side enforcement (required status checks: `typecheck`, `lint`, `test`, `build`)
+is unaffected by the Pro gate — those run on every PR via `ci.yml` and a PR
+cannot be merged through the UI if they fail. So even without server-side
+branch protection, CI gates ARE enforced on PRs; the local hook just prevents
+the "no PR at all" failure mode.

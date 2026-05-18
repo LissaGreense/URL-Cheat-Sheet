@@ -12,7 +12,8 @@ brainstormed using the workflow this skeleton ships.
 
 ```bash
 bun install
-bun run dev   # SvelteKit on http://localhost:5173
+bash scripts/setup-git-hooks.sh   # one-shot: wire pre-push hook (blocks push-to-main)
+bun run dev                       # SvelteKit on http://localhost:5173
 ```
 
 ## Run all CI checks locally

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Block direct pushes to main per ADR 0005 and project CLAUDE.md.
+# Wired via: git config core.hooksPath scripts/git-hooks
+# (Run scripts/setup-git-hooks.sh once per clone.)
+set -euo pipefail
+
+PROTECTED_BRANCH="main"
+REMOTE_REF="refs/heads/${PROTECTED_BRANCH}"
+
+while read -r local_ref local_oid remote_ref remote_oid; do
+  if [ "$remote_ref" = "$REMOTE_REF" ]; then
+    cat >&2 <<EOF
+🚨 BLOCKED: Direct push to '${PROTECTED_BRANCH}' is forbidden by project policy.
+
+All changes must land via PR (see CLAUDE.md, ADR 0005, opening-pr-orchestrator skill).
+
+To bypass in a genuine emergency:
+  git push --no-verify <args>
+
+Then file a 'gate:incident' bd issue documenting why the bypass was needed.
+EOF
+    exit 1
+  fi
+done
+
+exit 0
