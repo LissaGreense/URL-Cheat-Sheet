@@ -75,13 +75,13 @@ Write `docs/qa/reports/YYYY-MM-DD-<feature>.md`:
 For each failed assertion, create a `bd` issue:
 
 ```bash
-bd --no-daemon create \
+bd create \
   --title "QA defect: <one-line>" \
   --kind qa-defect \
   --label "gate:review" \
   --body "Report: docs/qa/reports/YYYY-MM-DD-<feature>.md#<anchor>\nRepro: <steps>"
 
-bd --no-daemon dep add --blocker <defect-id> --blocked <parent-feature-id>
+bd dep add --blocker <defect-id> --blocked <parent-feature-id>
 ```
 
 ## Stop conditions

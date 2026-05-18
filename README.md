@@ -27,7 +27,7 @@ bun run typecheck && bun run lint && bun run test && bun run build
 - `packages/{schemas,agent,evals,qa}` — workspaces
 - `docs/` — specs, plans, reviews, QA, evals, ADRs (see `docs/README.md`)
 - `.claude/` — vendored superpowers, project skills, team specs
-- `.beads/` — task DB (run `bd` with `--no-daemon`)
+- `.beads/` — task DB (bd v1.x: worktree-safe by default, no flags needed)
 
 ## For agents
 

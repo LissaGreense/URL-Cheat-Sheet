@@ -9,7 +9,7 @@ You are working in the URL-Cheat-Sheet monorepo. Before doing anything else:
 
 1. **Read `docs/README.md`** — the canonical docs taxonomy. Every artifact has one home.
 2. **Read `CLAUDE.md`** at the repo root — repo-wide agent rules.
-3. **Check `bd --no-daemon ready`** — what's claimable right now.
+3. **Check `bd ready`** — what's claimable right now.
 4. **Know the pipeline** — see `docs/specs/2026-05-17-agentic-workflow-skeleton.md` §8.
 
 ## Repo geography
@@ -19,7 +19,7 @@ You are working in the URL-Cheat-Sheet monorepo. Before doing anything else:
 - `.claude/plugins/superpowers/` — vendored skills, edit-in-tree
 - `.claude/skills/` — project skills (override upstream by name)
 - `.claude/teams/` — team specs
-- `.beads/` — task DB (always `bd --no-daemon`)
+- `.beads/` — task DB (bd v1.x: worktree-safe by default; prefix `ucs`)
 - `docs/` — every doc artifact (see `docs/README.md`)
 
 ## Pipeline stages → skills
@@ -39,7 +39,7 @@ You are working in the URL-Cheat-Sheet monorepo. Before doing anything else:
 
 ## Hard rules
 
-- `bd` always with `--no-daemon`.
+- `bd` v1.x (>= 1.0.2): worktree-safe by default — no flags needed. `--no-daemon` was removed upstream and errors.
 - `bun.lock` is text (never commit `bun.lockb`).
 - SvelteKit adapter runtime is `experimental_bun1.x`.
 - Zod 4: use `z.strictObject()`, never `.strict()`.

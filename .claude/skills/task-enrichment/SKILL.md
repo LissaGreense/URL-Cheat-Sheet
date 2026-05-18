@@ -10,7 +10,7 @@ Output: same issues, now with rich bodies + labels, transitioned to `enriched`.
 
 ## Per-issue procedure
 
-For each `proposed` issue (use `bd --no-daemon list --status proposed --json`):
+For each `proposed` issue (use `bd list --status proposed --json`):
 
 1. **Re-read the source plan task.**
 2. **Pick a team** by matching the affected paths to `.claude/teams/<team>.md` `owned paths:`
@@ -45,7 +45,7 @@ For each `proposed` issue (use `bd --no-daemon list --status proposed --json`):
 5. **Apply labels:**
 
    ```bash
-   bd --no-daemon update <id> \
+   bd update <id> \
      --label "team:<chosen-team>" \
      --label "gate:review" \
      --label "gate:qa-or-evals-if-applicable" \
@@ -55,7 +55,7 @@ For each `proposed` issue (use `bd --no-daemon list --status proposed --json`):
 
 ## Stop condition
 
-When `bd --no-daemon list --status proposed` returns empty.
+When `bd list --status proposed` returns empty.
 
 ## Guardrails
 

@@ -14,7 +14,7 @@ Output: one `bd` issue per plan task, in status `proposed`, with deps wired.
 2. **Create one bd issue per task** (in order, so IDs follow plan order):
 
    ```bash
-   bd --no-daemon create \
+   bd create \
      --title "<plan-task-title>" \
      --kind feature \
      --status proposed \
@@ -24,7 +24,7 @@ Output: one `bd` issue per plan task, in status `proposed`, with deps wired.
 3. **Wire dependencies.** If Task N+1 depends on Task N (default), add an edge:
 
    ```bash
-   bd --no-daemon dep add --blocker <id-of-N> --blocked <id-of-N+1>
+   bd dep add --blocker <id-of-N> --blocked <id-of-N+1>
    ```
 
 4. **Do not enrich.** Acceptance criteria, team labels, and affected files

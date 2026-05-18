@@ -148,7 +148,7 @@ URL-Cheat-Sheet/
     "test": "vitest run",
     "test:watch": "vitest",
     "eval": "bun --filter '@url-cheat-sheet/evals' run eval",
-    "bd": "bd --no-daemon",
+    "bd": "bd",
     "bv": "bv"
   },
   "devDependencies": {
@@ -1313,18 +1313,18 @@ brew install gastownhall/tap/beads || curl -fsSL https://gastownhall.github.io/b
 
 - [ ] **Step 2: Initialize the DB**
 
-Run: `bd --no-daemon init`
+Run: `bd init`
 Expected: `.beads/` directory created with the Dolt-backed store inside.
 
 - [ ] **Step 3: Sanity check**
 
-Run: `bd --no-daemon ready` (lists ready issues — should be empty)
+Run: `bd ready` (lists ready issues — should be empty)
 Expected: empty list, exit 0.
 
 - [ ] **Step 4: Add a single bootstrap issue**
 
 ```bash
-bd --no-daemon create \
+bd create \
   --title "Bootstrap: skeleton complete, ready for first feature spec" \
   --kind chore \
   --status ready
@@ -1337,7 +1337,7 @@ git add .beads
 git commit -m "chore(beads): initialize task DB + bootstrap chore issue
 
 Beads uses Dolt — commit .beads/ for version-controlled task graph.
---no-daemon required in worktree environments (see CLAUDE.md)."
+bd v1.x is worktree-safe by default (see CLAUDE.md)."
 ```
 
 ---
@@ -1407,7 +1407,7 @@ You are working in the URL-Cheat-Sheet monorepo. Before doing anything else:
 
 1. **Read `docs/README.md`** — the canonical docs taxonomy. Every artifact has one home.
 2. **Read `CLAUDE.md`** at the repo root — repo-wide agent rules.
-3. **Check `bd --no-daemon ready`** — what's claimable right now.
+3. **Check `bd ready`** — what's claimable right now.
 4. **Know the pipeline** — see `docs/specs/2026-05-17-agentic-workflow-skeleton.md` §8.
 
 ## Repo geography
@@ -1417,7 +1417,7 @@ You are working in the URL-Cheat-Sheet monorepo. Before doing anything else:
 - `.claude/plugins/superpowers/` — vendored skills, edit-in-tree
 - `.claude/skills/` — project skills (override upstream by name)
 - `.claude/teams/` — team specs
-- `.beads/` — task DB (always `bd --no-daemon`)
+- `.beads/` — task DB (always `bd`)
 - `docs/` — every doc artifact (see `docs/README.md`)
 
 ## Pipeline stages → skills
@@ -1437,7 +1437,7 @@ You are working in the URL-Cheat-Sheet monorepo. Before doing anything else:
 
 ## Hard rules
 
-- `bd` always with `--no-daemon`.
+- `bd` v1.x (>= 1.0.2): worktree-safe by default — no flags needed.
 - `bun.lock` is text (never commit `bun.lockb`).
 - SvelteKit adapter runtime is `experimental_bun1.x`.
 - Zod 4: use `z.strictObject()`, never `.strict()`.
@@ -1469,23 +1469,24 @@ description: Use when you need to query, create, or transition beads (`bd`) issu
 
 # Beads recipes
 
-Always invoke `bd` with `--no-daemon` — this repo runs across worktrees.
+`bd` v1.x (>= 1.0.2) is worktree-safe by default — worktrees share the same
+database via git common-directory discovery. No flags needed.
 
 ## Queries
 
 | Intent | Command |
 |---|---|
-| What's claimable now | `bd --no-daemon ready` |
+| What's claimable now | `bd ready` |
 | Parallel-track plan (JSON) | `bv --robot-plan` |
 | Priority recommendations (JSON) | `bv --robot-priority` |
 | Graph metrics (JSON) | `bv --robot-insights` |
 | Diff since a commit/date | `bv --robot-diff --diff-since <ref>` |
-| Single issue detail | `bd --no-daemon show <id>` |
+| Single issue detail | `bd show <id>` |
 
 ## Creation
 
 ```bash
-bd --no-daemon create \
+bd create \
   --title "<imperative title>" \
   --kind {feature,bug,chore,qa-defect,review-action} \
   --label "team:<team-name>" \
@@ -1503,13 +1504,13 @@ bd --no-daemon create \
 | `in_progress` → `in_review` | Implementation complete, awaiting review/QA/evals |
 | `in_review` → `closed` | All declared gates passed |
 
-Use: `bd --no-daemon update <id> --status <new-status>`
+Use: `bd update <id> --status <new-status>`
 
 ## Dependencies
 
 ```bash
 # A blocks B (B can't start until A closes)
-bd --no-daemon dep add --blocker <A> --blocked <B>
+bd dep add --blocker <A> --blocked <B>
 ```
 
 ## Worktrees
@@ -1557,7 +1558,7 @@ Output: one `bd` issue per plan task, in status `proposed`, with deps wired.
 2. **Create one bd issue per task** (in order, so IDs follow plan order):
 
    ```bash
-   bd --no-daemon create \
+   bd create \
      --title "<plan-task-title>" \
      --kind feature \
      --status proposed \
@@ -1567,7 +1568,7 @@ Output: one `bd` issue per plan task, in status `proposed`, with deps wired.
 3. **Wire dependencies.** If Task N+1 depends on Task N (default), add an edge:
 
    ```bash
-   bd --no-daemon dep add --blocker <id-of-N> --blocked <id-of-N+1>
+   bd dep add --blocker <id-of-N> --blocked <id-of-N+1>
    ```
 
 4. **Do not enrich.** Acceptance criteria, team labels, and affected files
@@ -1612,7 +1613,7 @@ Output: same issues, now with rich bodies + labels, transitioned to `enriched`.
 
 ## Per-issue procedure
 
-For each `proposed` issue (use `bd --no-daemon list --status proposed --json`):
+For each `proposed` issue (use `bd list --status proposed --json`):
 
 1. **Re-read the source plan task.**
 2. **Pick a team** by matching the affected paths to `.claude/teams/<team>.md` `owned paths:`
@@ -1647,7 +1648,7 @@ For each `proposed` issue (use `bd --no-daemon list --status proposed --json`):
 5. **Apply labels:**
 
    ```bash
-   bd --no-daemon update <id> \
+   bd update <id> \
      --label "team:<chosen-team>" \
      --label "gate:review" \
      --label "gate:qa-or-evals-if-applicable" \
@@ -1657,7 +1658,7 @@ For each `proposed` issue (use `bd --no-daemon list --status proposed --json`):
 
 ## Stop condition
 
-When `bd --no-daemon list --status proposed` returns empty.
+When `bd list --status proposed` returns empty.
 
 ## Guardrails
 
@@ -1759,13 +1760,13 @@ Write `docs/qa/reports/YYYY-MM-DD-<feature>.md`:
 For each failed assertion, create a `bd` issue:
 
 ```bash
-bd --no-daemon create \
+bd create \
   --title "QA defect: <one-line>" \
   --kind qa-defect \
   --label "gate:review" \
   --body "Report: docs/qa/reports/YYYY-MM-DD-<feature>.md#<anchor>\nRepro: <steps>"
 
-bd --no-daemon dep add --blocker <defect-id> --blocked <parent-feature-id>
+bd dep add --blocker <defect-id> --blocked <parent-feature-id>
 ```
 
 ## Stop conditions
@@ -1961,7 +1962,7 @@ Every team spec follows the same template — copy and customize.
 ## Handoff in
 
 Triggered manually by the user or by a slash command (`/claim-next`). Reads
-`bd --no-daemon ready` and picks the highest-priority issue (`bv --robot-priority`).
+`bd ready` and picks the highest-priority issue (`bv --robot-priority`).
 
 ## Handoff out
 
@@ -2159,9 +2160,9 @@ description: Print a snapshot of the agentic pipeline — current bd ready queue
 
 Run these commands in order and summarize the output for the user:
 
-1. `bd --no-daemon ready` — what's claimable
-2. `bd --no-daemon list --status in_progress` — what's being worked on
-3. `bd --no-daemon list --status in_review` — what's pending review/qa/evals
+1. `bd ready` — what's claimable
+2. `bd list --status in_progress` — what's being worked on
+3. `bd list --status in_review` — what's pending review/qa/evals
 4. `bv --robot-priority` — recommended next pick
 
 End with: "Top recommended pick: <id> — <title> (reason: <why>)".
@@ -2194,7 +2195,7 @@ If any step fails twice, stop and ask the user.
   "permissions": {
     "allow": [
       "Bash(bun:*)",
-      "Bash(bd --no-daemon:*)",
+      "Bash(bd:*)",
       "Bash(bv:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
@@ -2678,13 +2679,13 @@ set -euo pipefail
 
 case "${1:-help}" in
   ready)
-    bd --no-daemon ready
+    bd ready
     ;;
   in-progress)
-    bd --no-daemon list --status in_progress
+    bd list --status in_progress
     ;;
   review)
-    bd --no-daemon list --status in_review
+    bd list --status in_review
     ;;
   plan)
     bv --robot-plan
@@ -2776,7 +2777,7 @@ bun run typecheck && bun run lint && bun run test && bun run build
 - `packages/{schemas,agent,evals,qa}` — workspaces
 - `docs/` — specs, plans, reviews, QA, evals, ADRs (see `docs/README.md`)
 - `.claude/` — vendored superpowers, project skills, team specs
-- `.beads/` — task DB (run `bd` with `--no-daemon`)
+- `.beads/` — task DB (bd v1.x: worktree-safe by default, prefix `ucs`)
 
 ## For agents
 
@@ -2798,11 +2799,11 @@ Deploy: Vercel with adapter-vercel `experimental_bun1.x` runtime.
 
 1. Invoke the **`using-this-repo`** skill. It tells you the geography,
    the canonical workflow, and the hard rules.
-2. Check `bd --no-daemon ready` to see what's claimable.
+2. Check `bd ready` to see what's claimable.
 
 ## Hard rules
 
-- `bd` always with `--no-daemon` (worktree-safe).
+- `bd` v1.x (>= 1.0.2): worktree-safe by default via git common-dir discovery — no flags needed.
 - `bun.lock` is the lockfile — never commit `bun.lockb`.
 - SvelteKit adapter runtime: `experimental_bun1.x` (see ADR 0001).
 - Zod 4: `z.strictObject()`, never `.strict()`. Unified `error` param.
@@ -2832,7 +2833,7 @@ an ADR.
 - Mocking external services that we own end-to-end (use real integration tests).
 - Premature abstractions before the third use.
 - Speculative generality / "just in case" code.
-- Skipping `--no-daemon` on `bd`.
+- Passing `--no-daemon` to `bd` (removed upstream; it errors).
 ```
 
 - [ ] **Step 4: Commit**
@@ -2842,7 +2843,7 @@ git add README.md CLAUDE.md
 git commit -m "docs(root): rewrite README + add CLAUDE.md repo agent rules
 
 README orients humans, CLAUDE.md orients agents. CLAUDE.md surfaces
-hard rules (bd --no-daemon, bun.lock, runtime string, Zod 4 API,
+hard rules (bd, bun.lock, runtime string, Zod 4 API,
 Vite 8 API) so they're enforced at session start."
 ```
 
@@ -2897,14 +2898,14 @@ Expected: JSON `{"status":"ok","version":"0.0.0"}`.
 
 - [ ] **Step 7: Beads sanity**
 
-Run: `bd --no-daemon ready`
+Run: `bd ready`
 Expected: lists the bootstrap chore issue from Task 12.
 
 - [ ] **Step 8: Update the bootstrap bd issue and close it**
 
 ```bash
-BOOTSTRAP_ID=$(bd --no-daemon ready --json | jq -r '.[0].id')
-bd --no-daemon update "$BOOTSTRAP_ID" --status closed
+BOOTSTRAP_ID=$(bd ready --json | jq -r '.[0].id')
+bd update "$BOOTSTRAP_ID" --status closed
 ```
 
 - [ ] **Step 9: Commit smoke evidence**
@@ -2932,7 +2933,7 @@ gh pr create --title "Skeleton complete" --body "$(cat <<'EOF'
 - [x] bun run test (8+ tests)
 - [x] bun run build
 - [x] /api/health responds 200
-- [x] bd --no-daemon ready works
+- [x] bd ready works
 EOF
 )"
 ```
@@ -2962,7 +2963,7 @@ This plan implements every section of `docs/specs/2026-05-17-agentic-workflow-sk
 - §15 Success criteria — Task 29 verifies criterion 3 (CI green on trivial change); criteria 1, 2, 4, 5 are validated when the first real feature (the app) is brainstormed using this skeleton.
 
 **Hard rule reminders embedded in the plan:**
-- `bd --no-daemon` (Tasks 12, 14, 15, 16, 17, 18, 22, 27)
+- `bd` (Tasks 12, 14, 15, 16, 17, 18, 22, 27)
 - `bun.lock` not `bun.lockb` (Tasks 1, 14, 28)
 - `experimental_bun1.x` not `bun1.x` (Tasks 8, 26, 28)
 - `z.strictObject()` not `.strict()` (Tasks 4, 14, 28)

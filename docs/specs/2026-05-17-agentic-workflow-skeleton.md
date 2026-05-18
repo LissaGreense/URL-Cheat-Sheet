@@ -36,7 +36,7 @@ Every stage has a canonical skill, a canonical artifact location, and a canonica
 | Tests | Vitest 4 (required for Vite 8), `@testing-library/svelte`, jsdom | `vitest ^4.1.6` |
 | Lint / format | ESLint 10 + `eslint-plugin-svelte` + Prettier 3.8 (Biome considered; ESLint chosen for runes-aware Svelte rules) | `eslint ^10.4.0`, `prettier ^3.8.3` |
 | Evals | promptfoo (exact pin, still 0.x) | `0.121.11` |
-| Task DB | Beads (Dolt-backed), `bd --no-daemon` always | binary `v1.0.4` |
+| Task DB | Beads (Dolt-backed); worktree-safe by default via git common-dir discovery | binary `>= v1.0.2` (latest `v1.0.4`) |
 | Skills plugin | obra/superpowers, **vendored** into `.claude/plugins/superpowers/` and editable in tree | `v5.1.0` |
 | Browser automation (QA) | `claude-in-chrome` MCP | n/a |
 | Dependency hygiene | Renovate (better Bun + monorepo support than Dependabot) | n/a |
@@ -158,7 +158,7 @@ Each team spec is one page: **owned paths**, **skills to load**, **handoff in** 
 
 ## 9. Beads workflow
 
-- `.beads/` (Dolt-backed) committed; always `bd --no-daemon`.
+- `.beads/` (Dolt-backed) committed. Project prefix: `ucs`. `bd` v1.x is worktree-safe by default — no flags needed.
 - **Issue lifecycle:** `proposed` (from task-creation) → `enriched` (from task-enrichment) → `ready` (orchestrator-claimable) → `in_progress` → `in_review` → `closed`.
 - **Standard labels:**
   - `team:<name>` — routing
@@ -169,7 +169,7 @@ Each team spec is one page: **owned paths**, **skills to load**, **handoff in** 
   - QA defects `blocks` the parent feature issue — feature cannot close until defects do.
 - **Canonical queries** (wrapped in `beads-recipes` skill so commands don't drift):
   - `bv --robot-plan` — parallel-track view for orchestrator
-  - `bd ready --no-daemon` — unclaimed work
+  - `bd ready` — unclaimed work
   - `bv --robot-priority` — what to pick next
 - **Worktrees:** every implementation issue gets its own worktree. Orchestrator creates the worktree, spawns the team, merges on close.
 

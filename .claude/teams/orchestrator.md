@@ -6,7 +6,7 @@
 ## Handoff in
 
 Triggered manually by the user or by a slash command (`/claim-next`). Reads
-`bd --no-daemon ready` and picks the highest-priority issue (`bv --robot-priority`).
+`bd ready` and picks the highest-priority issue (`bv --robot-priority`).
 
 ## Handoff out
 

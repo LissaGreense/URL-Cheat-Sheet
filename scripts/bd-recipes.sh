@@ -5,13 +5,13 @@ set -euo pipefail
 
 case "${1:-help}" in
   ready)
-    bd --no-daemon ready
+    bd ready
     ;;
   in-progress)
-    bd --no-daemon list --status in_progress
+    bd list --status in_progress
     ;;
   review)
-    bd --no-daemon list --status in_review
+    bd list --status in_review
     ;;
   plan)
     bv --robot-plan
