@@ -1,0 +1,50 @@
+name: bd-pr-audit
+
+on:
+  schedule:
+    - cron: '0 7 * * *' # 07:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bd
+        # Note: bd version is unpinned; install script tracks latest. Pin via BD_VERSION env var if upstream supports it.
+        run: |
+          curl -fsSL https://gastownhall.github.io/beads/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Run audit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DRIFT_OUTPUT="$(./scripts/bd-pr-audit.sh)"
+          if [ -n "$DRIFT_OUTPUT" ]; then
+            echo "::warning::bd ↔ PR drift detected"
+            echo "$DRIFT_OUTPUT"
+            echo "$DRIFT_OUTPUT" | while read -r LINE; do
+              # Extract the bd issue ID (4th word of every drift line)
+              ID="$(echo "$LINE" | awk '{print $4}')"
+              TITLE="audit drift: $ID"
+              # Dedup by short, search-safe title. GitHub search handles plain alphanumerics reliably.
+              EXISTING="$(gh issue list --label incident --state open --search "\"$TITLE\" in:title" --json title --jq '.[] | select(.title == "'"$TITLE"'") | .title' | head -1)"
+              if [ -z "$EXISTING" ]; then
+                gh issue create \
+                  --title "$TITLE" \
+                  --label "incident" \
+                  --body "$LINE
+
+          Auto-filed by .github/workflows/bd-pr-audit.yml. Investigate manually."
+              else
+                echo "dedup: existing issue covers \"$TITLE\""
+              fi
+            done
+            exit 1
+          fi
+          echo "no drift detected"
