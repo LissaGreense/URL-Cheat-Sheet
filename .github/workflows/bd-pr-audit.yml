@@ -1,0 +1,42 @@
+name: bd-pr-audit
+
+on:
+  schedule:
+    - cron: '0 7 * * *' # 07:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bd
+        run: |
+          curl -fsSL https://gastownhall.github.io/beads/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Run audit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DRIFT_OUTPUT="$(./scripts/bd-pr-audit.sh)"
+          if [ -n "$DRIFT_OUTPUT" ]; then
+            echo "::warning::bd ↔ PR drift detected"
+            echo "$DRIFT_OUTPUT"
+            echo "$DRIFT_OUTPUT" | while read -r LINE; do
+              bd create \
+                --title "audit: $LINE" \
+                --type bug \
+                --label "incident" \
+                --priority 1 \
+                --description "Auto-filed by .github/workflows/bd-pr-audit.yml. Investigate manually."
+            done
+            exit 1
+          fi
+          echo "no drift detected"
