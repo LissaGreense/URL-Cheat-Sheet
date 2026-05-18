@@ -359,7 +359,7 @@ from §4 plus a pointer to `scripts/render-pr-body.sh`.
 | Review-pass cap hit | counter ≥ 3 without approval | Loop stops; PR remains open with `gate:review` set | `bd human <id>` immediately |
 | Gate stalls | `gate:*` unchanged > 2h with bd in `in_review` | Re-spawn the responsible agent once (idempotent — agents read bd state) | If still stalled: `bd human <id>` |
 | Merge conflict | `gh pr merge` returns conflict | `git rebase main` on worktree; force-push to `feat/*` (only sanctioned force-push) | If rebase has conflicts: `bd human <id>` with conflict file list; worktree preserved |
-| bd ↔ PR divergence | Nightly audit script: open PRs whose bd is `closed`, or `in_review` bd with no PR | Audit script files `gate:incident` bd issues per drift | Always — divergence is never auto-fixed |
+| bd ↔ PR divergence | Nightly audit script: open PRs whose bd is `closed`, or `in_review` bd with no PR | Audit script files GitHub issues labelled `incident`, deduplicated by bd-id title (`audit drift: <id>`) | Always — divergence is never auto-fixed |
 | Worktree orphaned | `git worktree list` shows worktrees whose bd is `closed` > 24h | `git worktree remove ../wt-<id>` automatically | None — pure cleanup, logged |
 | Aborted PR (impl gives up) | bd transitioned to `blocked` / `proposed` while PR is open | `gh pr close <pr>` with abort comment; remove worktree | Logged; re-attempt requires fresh issue or explicit unblock |
 | Force-push to `main` succeeds | Branch-protection bypass or misconfiguration | `bd create --type=bug --label=incident --priority=0`; no auto-revert (too risky) | `bd human <id>` immediately |

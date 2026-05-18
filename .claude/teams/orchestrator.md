@@ -27,7 +27,7 @@ For each ready issue:
 | Review-pass cap | counter ≥ **3** without approval | Loop stops; PR remains open with `gate:review` set | `bd human <id>` immediately |
 | Gate stalls | `gate:*` unchanged > **2h** with bd in `in_review` | Re-spawn the responsible agent once (safe to retry) | If still stalled: `bd human <id>` |
 | Merge conflict | `gh pr merge` returns conflict | `git rebase main` on worktree; force-push to `feat/*` (only sanctioned force-push) | If rebase has conflicts: `bd human <id>`; preserve worktree |
-| bd ↔ PR divergence | Nightly `scripts/bd-pr-audit.sh` (added Task 11) | Audit files `gate:incident` bd issues per drift | Always escalates |
+| bd ↔ PR divergence | Nightly `scripts/bd-pr-audit.sh` | Audit files GitHub issues labelled `incident`, dedup-keyed by bd id | Always escalates |
 | Worktree orphaned | `git worktree list` vs bd-`closed` for > 24h | `git worktree remove ../wt-<id>` automatically | None — pure cleanup, logged |
 | Aborted PR | bd → `blocked`/`proposed` while PR open | `gh pr close` with abort comment; remove worktree | Logged; re-attempt requires fresh issue |
 | Force-push to `main` succeeds | Branch-protection bypass | `bd create --type=bug --label=incident --priority=0`; no auto-revert | `bd human <id>` immediately |
