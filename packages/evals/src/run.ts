@@ -46,13 +46,9 @@ const outDir = join(repoRoot, 'docs/evals');
 mkdirSync(outDir, { recursive: true });
 const outFile = join(outDir, `${suite}-${today}.md`);
 
-const snapshot = [
-  `# Eval snapshot: ${suite} — ${today}`,
-  '',
-  '```json',
-  evalJson,
-  '```'
-].join('\n');
+const snapshot = [`# Eval snapshot: ${suite} — ${today}`, '', '```json', evalJson, '```'].join(
+  '\n'
+);
 
 writeFileSync(outFile, snapshot, 'utf8');
 console.log(`Snapshot written to ${outFile}`);
