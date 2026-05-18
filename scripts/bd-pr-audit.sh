@@ -13,8 +13,12 @@
 #   GH_PR_LIST_JSON — JSON array of GH PRs     (default: `gh pr list --json url,state,title`)
 set -euo pipefail
 
-BD_LIST_JSON="${BD_LIST_JSON:-$(bd list --all --json 2>/dev/null || echo '[]')}"
-GH_PR_LIST_JSON="${GH_PR_LIST_JSON:-$(gh pr list --json url,state,title 2>/dev/null || echo '[]')}"
+# Fail loud: if `bd` or `gh` is missing / unauthenticated / errors out, we
+# want the script to exit non-zero with a visible error rather than silently
+# pretending "no drift." For an audit script, false-quiet is the worst failure
+# mode. `set -e` above + un-swallowed errors below give CI a real signal.
+BD_LIST_JSON="${BD_LIST_JSON:-$(bd list --all --json)}"
+GH_PR_LIST_JSON="${GH_PR_LIST_JSON:-$(gh pr list --json url,state,title)}"
 
 # ---------------------------------------------------------------------------
 # Drift type 1: bd issue closed but its PR is still OPEN
@@ -30,7 +34,7 @@ echo "$BD_LIST_JSON" | jq -r '
   | (.notes | split("\n")[] | select(test("^PR: ")) | ltrimstr("PR: ")) as $pr
   | "\($i.id)|\($pr)"
 ' | while IFS='|' read -r ID PR; do
-  STATE="$(jq -r --arg url "$PR" '.[] | select(.url == $url) | .state' <<<"$GH_PR_LIST_JSON" 2>/dev/null || true)"
+  STATE="$(jq -r --arg url "$PR" '.[] | select(.url == $url) | .state' <<<"$GH_PR_LIST_JSON")"
   if [ "$STATE" = "OPEN" ]; then
     echo "DRIFT: bd issue $ID is closed but PR $PR is still OPEN"
   fi

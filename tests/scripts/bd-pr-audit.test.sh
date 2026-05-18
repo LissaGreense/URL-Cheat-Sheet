@@ -51,4 +51,17 @@ if [ -n "$OUTPUT" ]; then
   exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# Fixture 5 (no drift): bd closed + PR is MERGED (not OPEN)
+# Semantics: "closed + OPEN PR" is the only drift case for closed issues.
+# Other terminal PR states (MERGED, CLOSED) are healthy — bd state matches.
+# ---------------------------------------------------------------------------
+BD_LIST_JSON='[{"id":"ucs-test5","status":"closed","notes":"PR: https://example.com/pr/5"}]'
+GH_PR_LIST_JSON='[{"url":"https://example.com/pr/5","state":"MERGED","title":"x"}]'
+OUTPUT="$(BD_LIST_JSON="$BD_LIST_JSON" GH_PR_LIST_JSON="$GH_PR_LIST_JSON" "$SCRIPT" || true)"
+if [ -n "$OUTPUT" ]; then
+  echo "FAIL: fixture 5 expected no drift for closed+MERGED, got: $OUTPUT"
+  exit 1
+fi
+
 echo "PASS: bd-pr-audit.sh detects both drift directions"
