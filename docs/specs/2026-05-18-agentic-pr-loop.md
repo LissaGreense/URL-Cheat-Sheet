@@ -4,7 +4,7 @@
 **Author:** brainstorming session, 2026-05-18
 **Supersedes:** §8 row "Implementation → Code review → QA → Evals" of
 [`2026-05-17-agentic-workflow-skeleton.md`](2026-05-17-agentic-workflow-skeleton.md)
-**Related ADRs:** none yet; this spec will spawn ADR 0002 "Branch-first +
+**Related ADRs:** [ADR 0005](../adr/0005-branch-first-and-branch-protection.md) "Branch-first +
 branch protection for `main`".
 
 ---
@@ -376,7 +376,7 @@ tick picks up where it left off without corrupting state.
 |---|---|
 | Dedicated GitHub App for orchestrator identity | Filed as `gate:future` bd issue; current human-identity-as-orchestrator is fine for a single-developer repo. |
 | Auto-rebase `main` into all open feat branches nightly | Adds noise; defer until we have ≥ 3 concurrent PRs. |
-| ADR 0002 "Branch-first + branch protection" | Will be written as part of the implementation plan that follows this spec. |
+| [ADR 0005](../adr/0005-branch-first-and-branch-protection.md) "Branch-first + branch protection" | Written; see [../adr/0005-branch-first-and-branch-protection.md](../adr/0005-branch-first-and-branch-protection.md). |
 
 ## 10. References
 
