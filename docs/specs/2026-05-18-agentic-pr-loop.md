@@ -376,7 +376,6 @@ tick picks up where it left off without corrupting state.
 |---|---|
 | Dedicated GitHub App for orchestrator identity | Filed as `gate:future` bd issue; current human-identity-as-orchestrator is fine for a single-developer repo. |
 | Auto-rebase `main` into all open feat branches nightly | Adds noise; defer until we have ≥ 3 concurrent PRs. |
-| PR-level cost telemetry (token usage per review pass) | Useful but premature; revisit after first 10 PRs go through the loop. |
 | ADR 0002 "Branch-first + branch protection" | Will be written as part of the implementation plan that follows this spec. |
 
 ## 10. References
