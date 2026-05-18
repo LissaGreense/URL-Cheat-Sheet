@@ -28,7 +28,10 @@
 
 ## Workflow stages → skills (canonical)
 
-See `docs/specs/2026-05-17-agentic-workflow-skeleton.md` §8 for the table.
+See `.claude/skills/using-this-repo/SKILL.md` § "Pipeline stages → skills" for
+the table (13 rows, including the PR lifecycle stages added by ADR 0005).
+The older `docs/specs/2026-05-17-agentic-workflow-skeleton.md` §8 has the
+pre-supersession 9-row version; do not use it as the authoritative reference.
 
 ## Doc conventions
 
