@@ -29,14 +29,18 @@ jobs:
             echo "::warning::bd ↔ PR drift detected"
             echo "$DRIFT_OUTPUT"
             echo "$DRIFT_OUTPUT" | while read -r LINE; do
-              TITLE="audit: $LINE"
-              # dedup: skip if an open issue with same title exists
-              EXISTING="$(gh issue list --label incident --state open --search "$TITLE in:title" --json title --jq '.[] | select(.title == "'"$TITLE"'") | .title' | head -1)"
+              # Extract the bd issue ID (4th word of every drift line)
+              ID="$(echo "$LINE" | awk '{print $4}')"
+              TITLE="audit drift: $ID"
+              # Dedup by short, search-safe title. GitHub search handles plain alphanumerics reliably.
+              EXISTING="$(gh issue list --label incident --state open --search "\"$TITLE\" in:title" --json title --jq '.[] | select(.title == "'"$TITLE"'") | .title' | head -1)"
               if [ -z "$EXISTING" ]; then
                 gh issue create \
                   --title "$TITLE" \
                   --label "incident" \
-                  --body "Auto-filed by .github/workflows/bd-pr-audit.yml. Investigate manually."
+                  --body "$LINE
+
+          Auto-filed by .github/workflows/bd-pr-audit.yml. Investigate manually."
               else
                 echo "dedup: existing issue covers \"$TITLE\""
               fi
