@@ -6,9 +6,18 @@ set -euo pipefail
 
 BD_ID="${1:?Usage: $0 <bd-id>}"
 
-ISSUE_JSON="$(bd show "$BD_ID" --json)"
-# bd show returns an array; grab the first element
-ISSUE="$(jq -r '.[0]' <<<"$ISSUE_JSON")"
+# bd show returns a JSON array; grab the first element as a JSON object.
+# Capture bd output separately so we can produce a clean error message
+# regardless of whether bd itself errors or just returns [].
+if ! ISSUE_JSON="$(bd show "$BD_ID" --json 2>/dev/null)"; then
+  echo "Error: bd issue '$BD_ID' not found" >&2
+  exit 1
+fi
+ISSUE="$(jq -c '.[0] // empty' <<<"$ISSUE_JSON")"
+if [ -z "$ISSUE" ] || [ "$ISSUE" = "null" ]; then
+  echo "Error: bd issue '$BD_ID' not found" >&2
+  exit 1
+fi
 
 TITLE="$(jq -r '.title' <<<"$ISSUE")"
 BODY="$(jq -r '.description // ""' <<<"$ISSUE")"
@@ -45,7 +54,7 @@ $BODY
 $PASS_NOTES
 
 ## bd issue
-[$BD_ID](../../.beads/issues.jsonl) — $TITLE
+$BD_ID — $TITLE
 
 ## Gates
 $(gate_check review)
