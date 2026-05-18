@@ -16,11 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install bd
+        # Note: bd version is unpinned; install script tracks latest. Pin via BD_VERSION env var if upstream supports it.
         run: |
           curl -fsSL https://gastownhall.github.io/beads/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
       - name: Run audit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -30,12 +29,17 @@ jobs:
             echo "::warning::bd ↔ PR drift detected"
             echo "$DRIFT_OUTPUT"
             echo "$DRIFT_OUTPUT" | while read -r LINE; do
-              bd create \
-                --title "audit: $LINE" \
-                --type bug \
-                --label "incident" \
-                --priority 1 \
-                --description "Auto-filed by .github/workflows/bd-pr-audit.yml. Investigate manually."
+              TITLE="audit: $LINE"
+              # dedup: skip if an open issue with same title exists
+              EXISTING="$(gh issue list --label incident --state open --search "$TITLE in:title" --json title --jq '.[] | select(.title == "'"$TITLE"'") | .title' | head -1)"
+              if [ -z "$EXISTING" ]; then
+                gh issue create \
+                  --title "$TITLE" \
+                  --label "incident" \
+                  --body "Auto-filed by .github/workflows/bd-pr-audit.yml. Investigate manually."
+              else
+                echo "dedup: existing issue covers \"$TITLE\""
+              fi
             done
             exit 1
           fi
