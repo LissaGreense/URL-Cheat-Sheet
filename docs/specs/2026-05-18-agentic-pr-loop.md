@@ -1,6 +1,8 @@
 # Agentic PR Loop — Design
 
-**Status:** draft (awaiting user review)
+**Status:** accepted
+**Implemented:** 2026-05-18 (PR #3 merge — see git log for exact SHA)
+**Implementation plan:** [../plans/2026-05-18-agentic-pr-loop.md](../plans/2026-05-18-agentic-pr-loop.md)
 **Author:** brainstorming session, 2026-05-18
 **Supersedes:** §8 row "Implementation → Code review → QA → Evals" of
 [`2026-05-17-agentic-workflow-skeleton.md`](2026-05-17-agentic-workflow-skeleton.md)
