@@ -8,6 +8,10 @@
 3. **Before any commit:** confirm `git rev-parse --abbrev-ref HEAD` is
    not `main`. If it is, branch first (`git checkout -b feat/<id>-<slug>`
    for pipeline work, `chore/<slug>` for one-shot cleanups).
+4. **First time in a fresh clone or worktree:** run
+   `bash scripts/setup-git-hooks.sh` to wire the version-controlled
+   pre-push hook that blocks direct pushes to `main`. Verify with
+   `git config core.hooksPath` (should print `scripts/git-hooks`).
 
 ## Hard rules
 
@@ -22,8 +26,10 @@
 - **Never push to `main` directly.** All changes land via PR. The
   orchestrator opens the PR at worktree creation (see
   `opening-pr-orchestrator` skill) and merges after CI green + all
-  `gate:*` labels cleared. Branch protection on `main` enforces this
-  mechanically (see ADR 0005).
+  `gate:*` labels cleared. Local pre-push hook
+  (`scripts/git-hooks/pre-push`, wired via `setup-git-hooks.sh`)
+  enforces this mechanically; see ADR 0005 for why a local hook
+  rather than GitHub branch protection.
 - QA team never fixes defects — files them only.
 
 ## Workflow stages → skills (canonical)
@@ -52,7 +58,7 @@ an ADR.
 - Premature abstractions before the third use.
 - Speculative generality / "just in case" code.
 - Passing `--no-daemon` to `bd` (the flag was removed upstream; it errors).
-- `git push origin main` (or any direct write to `main`). Branch
-  protection blocks it; if it slips through, treat it as a near-miss
-  incident and file `bd create --type=bug --priority=0
-  --label=incident`.
+- `git push origin main` (or any direct write to `main`). The local
+  pre-push hook blocks it; if it slips through (`--no-verify`, or
+  hook not yet wired), treat it as a near-miss incident and file
+  `bd create --type=bug --priority=0 --label=incident`.
