@@ -128,6 +128,40 @@ git pull --ff-only
 git stash drop 2>/dev/null || true
 ```
 
+## Gate clearance — reviewer protocol
+
+Each `gate:*` label is cleared by the agent responsible for that gate
+(review / qa / evals). The bd label removal is the **load-bearing**
+clearance — without it `pr-merge` aborts. The PR-side approval (a GH
+comment) is decorative but useful for audit trail.
+
+For `gate:review` specifically, **do not run** `gh pr review --approve`:
+GitHub refuses approval on PRs the actor opened
+(`Can not approve your own pull request`), and the orchestrator opens
+every pipeline PR. Use a plain comment instead:
+
+```bash
+ID="$1"
+PR_URL="$(bd show "$ID" --json | jq -r '.[0].notes' | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)"
+
+# Reviewer agent (or human reviewer) on approval:
+gh pr comment "$PR_URL" --body "**gate:review** — APPROVED. <one-line rationale or pass count>"
+bd update "$ID" --remove-label "gate:review"
+bd update "$ID" --append-notes "gate:review cleared by <reviewer> @ $(date -u +%FT%TZ)"
+```
+
+If the reviewer requests changes instead of approving:
+
+```bash
+gh pr comment "$PR_URL" --body "**gate:review** — CHANGES REQUESTED. <findings>"
+# Leave gate:review label intact; do NOT remove it.
+# Increment review-pass counter; the orchestrator escalates at pass ≥ 3
+# (see "Failure / escalation" below).
+```
+
+Same pattern for `gate:qa` and `gate:evals` — comment with the verdict,
+then `--remove-label` only on green.
+
 ## Failure / escalation
 
 See spec [§8](../../../docs/specs/2026-05-18-agentic-pr-loop.md) and team
