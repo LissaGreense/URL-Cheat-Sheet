@@ -3,7 +3,9 @@ description: Orchestrator entrypoint. Picks the top-priority ready bd issue, cre
 ---
 
 1. Invoke the `using-this-repo` skill (always first).
-2. Read `bv --robot-priority` and pick the top issue with status `ready`.
+2. Read `bv --robot-priority` and pick the top recommendation. Confirm the issue
+   has a `team:` label (the signal that `task-enrichment` ran on it); skip any
+   `proposed` items — they aren't claimable yet.
 3. Extract the `team:<name>` label.
 4. Create a worktree: `git worktree add ../wt-<id> -b feat/<id>-<slug> main`.
 5. Spawn the named team using `superpowers:subagent-driven-development`, passing the issue ID and worktree path.

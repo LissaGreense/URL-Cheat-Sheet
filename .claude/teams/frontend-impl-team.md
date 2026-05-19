@@ -5,7 +5,8 @@
 
 ## Handoff in
 
-Claims `bd` issues with `team:frontend-impl-team` in status `ready`.
+Claims `bd` issues with `team:frontend-impl-team` in status `open` (i.e.
+enriched and claimable — see ADR 0006).
 
 ## Handoff out
 

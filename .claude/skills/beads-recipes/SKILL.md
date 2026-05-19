@@ -37,13 +37,17 @@ bd create \
 
 | From → To | When |
 |---|---|
-| `proposed` → `enriched` | After `task-enrichment` adds acceptance criteria + team label |
-| `enriched` → `ready` | After orchestrator confirms dependencies wired |
-| `ready` → `in_progress` | Team claims, sets `owner` |
-| `in_progress` → `in_review` | Implementation complete, awaiting review/QA/evals |
-| `in_review` → `closed` | All declared gates passed |
+| `proposed` → `open` | After `task-enrichment` adds acceptance criteria + `team:` label |
+| `open` → `in_progress` | `opening-pr-orchestrator` `pr-open` action (worktree + draft PR created) |
+| `in_progress` → `in_review` | Implementation complete, `pr-ready` action flips PR to ready |
+| `in_review` → `closed` | All declared gates passed, `pr-merge` action lands the squash-merge |
 
 Use: `bd update <id> --status <new-status>`
+
+The only custom statuses in this project are `proposed` (un-enriched holding pen)
+and `in_review` (PR open, gates clearing). Built-in `open` is the canonical
+claimable state — both `bd ready` and `bv --robot-priority` filter to active
+built-in statuses, so enriched issues must live there to be picked up. See ADR 0006.
 
 ## Dependencies
 

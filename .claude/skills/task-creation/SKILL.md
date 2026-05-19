@@ -36,5 +36,7 @@ Output: one `bd` issue per plan task, in status `proposed`, with deps wired.
 ## Guardrails
 
 - Do **not** assign owners.
-- Do **not** transition to `enriched` or `ready`.
+- Do **not** transition past `proposed`. The next stage (`task-enrichment`)
+  promotes issues to `open` once they have a `team:` label and acceptance
+  criteria. See ADR 0006.
 - Do **not** start implementation.

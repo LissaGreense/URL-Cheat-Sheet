@@ -1,12 +1,15 @@
 ---
 name: task-enrichment
-description: Use after `task-creation` has populated `bd` with `proposed` issues. Walks the plan and adds acceptance criteria, affected files, a `team:` label, and any `gate:` labels per issue. Transitions each enriched issue to status `enriched`.
+description: Use after `task-creation` has populated `bd` with `proposed` issues. Walks the plan and adds acceptance criteria, affected files, a `team:` label, and any `gate:` labels per issue. Transitions each enriched issue to status `open` (the canonical claimable state — see ADR 0006).
 ---
 
 # Task enrichment
 
 Input: `proposed` `bd` issues that map 1:1 to plan tasks.
-Output: same issues, now with rich bodies + labels, transitioned to `enriched`.
+Output: same issues, now with rich bodies + labels, transitioned to `open` so
+that `bd ready` and `bv --robot-priority` can see them. The `team:` and `gate:`
+labels added in this stage are themselves the signal that enrichment is complete —
+no extra custom status is needed (ADR 0006).
 
 ## Per-issue procedure
 
@@ -50,7 +53,7 @@ For each `proposed` issue (use `bd list --status proposed --json`):
      --label "gate:review" \
      --label "gate:qa-or-evals-if-applicable" \
      --body "<enriched-body>" \
-     --status enriched
+     --status open
    ```
 
 ## Stop condition
@@ -59,5 +62,6 @@ When `bd list --status proposed` returns empty.
 
 ## Guardrails
 
-- Do **not** transition past `enriched`. Orchestrator moves issues to `ready`.
+- Transition to `open`, not `in_progress`. The orchestrator's `pr-open` action
+  is what flips an issue to `in_progress` (it does that when the draft PR is created).
 - If acceptance criteria cannot be inferred from the plan task, escalate to the user — do not invent them.
