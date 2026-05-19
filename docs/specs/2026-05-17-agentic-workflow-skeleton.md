@@ -1,7 +1,12 @@
 # Spec: Agentic Workflow + Repo Skeleton
 
 **Date:** 2026-05-17
-**Status:** Approved — ready for planning
+**Status:** Approved — implemented. **§8 pipeline table superseded** by
+[`2026-05-18-agentic-pr-loop.md`](2026-05-18-agentic-pr-loop.md), and
+the canonical 13-stage table now lives in
+[`.claude/skills/using-this-repo/SKILL.md`](../../.claude/skills/using-this-repo/SKILL.md).
+The 9-row table below is preserved for history but is not the current
+pipeline. Read it only for context on the original scope.
 **Scope:** Workflow infrastructure and repo scaffolding only. The URL-Cheat-Sheet *app* (URL fetch + chat agent) is out of scope here and will be brainstormed in a separate spec using the workflow this spec establishes.
 
 ---

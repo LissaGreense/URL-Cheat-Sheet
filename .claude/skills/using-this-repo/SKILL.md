@@ -10,7 +10,7 @@ You are working in the URL-Cheat-Sheet monorepo. Before doing anything else:
 1. **Read `docs/README.md`** — the canonical docs taxonomy. Every artifact has one home.
 2. **Read `CLAUDE.md`** at the repo root — repo-wide agent rules.
 3. **Check `bd ready`** — what's claimable right now.
-4. **Know the pipeline** — see `docs/specs/2026-05-17-agentic-workflow-skeleton.md` §8.
+4. **Know the pipeline** — the canonical 13-stage table is in this skill's "Pipeline stages → skills" section below. (The original 9-stage version in `docs/specs/2026-05-17-agentic-workflow-skeleton.md` §8 was superseded by `docs/specs/2026-05-18-agentic-pr-loop.md` once the PR-lifecycle stages were added.)
 
 ## Repo geography
 
@@ -30,9 +30,16 @@ completes (`pr-ready`), and merges after gates clear (`pr-merge`). See
 the [`opening-pr-orchestrator`](../opening-pr-orchestrator/SKILL.md)
 skill for the actual recipes.
 
-Direct pushes to `main` are blocked by GitHub branch protection (see
-ADR 0005). If you're not going through the full pipeline (e.g., a
-one-shot doc fix), branch as `chore/<slug>` instead.
+Direct pushes to `main` are blocked by the version-controlled
+**local pre-push hook** (`scripts/git-hooks/pre-push`, wired via
+`scripts/setup-git-hooks.sh`). GitHub branch protection is unavailable
+on the free-tier private setup, so server-side enforcement is opt-in
+once the repo upgrades or goes public — see ADR 0005's 2026-05-18 and
+2026-05-19 addendums. If you're not going through the full pipeline
+(e.g., a one-shot doc fix), branch as `chore/<slug>` instead. For
+merging chore PRs without the orchestrator, use
+`bash scripts/safe-merge.sh <pr> [--wait]` so red CI can't slip
+through (ucs-0z5).
 
 ## Pipeline stages → skills
 
