@@ -1,0 +1,46 @@
+# URL-grounded chat scaffold — initial eval suite (ucs-92p, Task 10).
+#
+# Scaffold limitation: the runner in `packages/evals/src/run.ts` invokes
+# `promptfoo eval` against this config, which calls the model provider
+# (Anthropic) directly using the inline prompt template below. It does
+# NOT route through our chat agent, so the `kb_url` variable is merely
+# stuffed into the prompt — there is no real URL fetch/extract/grep
+# happening here. As a result, citation assertions (`L\d+` line refs)
+# will only pass if the model fabricates a plausible-looking line
+# reference, which is exactly what the real agent prevents.
+#
+# That's accepted for this initial scaffold. The full per-task
+# LLM-graded matrix that plumbs `kb_url` through the chat agent
+# (extract → grep → answer-with-citation) is the deferred `gate:evals`
+# follow-up tracked alongside this issue. See
+# docs/plans/2026-05-19-url-fetcher.v2.md § "Task 10" and the
+# follow-ups section for the matrix-expansion bd.
+description: URL-grounded chat — answer quality with citation requirement
+prompts:
+  - |
+    [system] {{system_prompt}}
+    [user] Document URL: {{kb_url}}
+    {{question}}
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      max_tokens: 1024
+tests:
+  - description: HTCPCP expansion grounded in RFC 2324
+    vars:
+      kb_url: https://www.rfc-editor.org/rfc/rfc2324.html
+      question: What does HTCPCP stand for?
+    assert:
+      - type: contains
+        value: Hyper Text Coffee Pot Control Protocol
+      - type: regex
+        value: 'L\d+'
+  - description: 418 status code lookup
+    vars:
+      kb_url: https://www.rfc-editor.org/rfc/rfc2324.html
+      question: What HTTP status code does RFC 2324 reserve for teapots?
+    assert:
+      - type: contains
+        value: '418'
+      - type: regex
+        value: 'L\d+'
