@@ -4,9 +4,16 @@ A web app where you drop a URL and chat with an agent that has read it.
 
 ## What's here
 
-This repo is currently the **skeleton** — workflow infra, scaffolds, and CI.
-The app itself (URL fetch + chat agent) is the first feature, to be
-brainstormed using the workflow this skeleton ships.
+The first end-to-end slice ships: a chat UI grounded in **RFC 2324**
+(Hyper Text Coffee Pot Control Protocol), bundled as a static text
+file at build time. The backend agent has a single tool — `grep_rfc` —
+that runs case-insensitive substring search over the RFC and returns
+line-numbered hits with two lines of surrounding context. The model
+(Claude Sonnet 4.6) cites line numbers inline in its answers.
+
+URL fetching — the actual point of "URL Cheat Sheet" — is the next
+slice. See [`docs/specs/2026-05-18-rfc2324-chat-mvp.md`](docs/specs/2026-05-18-rfc2324-chat-mvp.md)
+for what's currently shipped and what's explicitly deferred to v2.
 
 ## Quick start
 
@@ -41,11 +48,15 @@ orchestrator.
 
 ## Layout
 
-- `apps/web/` — SvelteKit (Vercel target)
-- `packages/{schemas,agent,evals,qa}` — workspaces
-- `docs/` — specs, plans, reviews, QA, evals, ADRs (see `docs/README.md`)
-- `.claude/` — vendored superpowers, project skills, team specs
-- `.beads/` — task DB (bd v1.x: worktree-safe by default, no flags needed)
+- `apps/web/` — SvelteKit app (Vercel target). Chat UI at `/`, agent endpoint at `/api/chat`.
+- `packages/agent/` — RFC text bundled at `src/data/rfc2324.txt`, `grep_rfc` tool, `streamChat` entry, system prompt.
+- `packages/schemas/` — shared Zod schemas (chat request, message, QA case).
+- `packages/evals/` — promptfoo runner + suites. Canary suite under `suites/canary/`.
+- `packages/qa/` — reserved for QA test infra (skeleton).
+- `docs/` — specs, plans, reviews, QA, evals, ADRs (see [`docs/README.md`](docs/README.md)).
+- `scripts/` — one-shot setup (`setup-git-hooks.sh`, `setup-bd.sh`) and the chore-PR safe-merge wrapper.
+- `.claude/` — vendored superpowers, project skills, team specs.
+- `.beads/` — task DB (bd v1.x: worktree-safe by default, no flags needed).
 
 ## For agents
 
