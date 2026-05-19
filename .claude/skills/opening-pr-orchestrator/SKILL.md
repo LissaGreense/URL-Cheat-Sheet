@@ -141,6 +141,9 @@ GitHub refuses approval on PRs the actor opened
 every pipeline PR. Use a plain comment instead:
 
 ```bash
+ID="$1"
+PR_URL="$(bd show "$ID" --json | jq -r '.[0].notes' | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)"
+
 # Reviewer agent (or human reviewer) on approval:
 gh pr comment "$PR_URL" --body "**gate:review** — APPROVED. <one-line rationale or pass count>"
 bd update "$ID" --remove-label "gate:review"
@@ -152,7 +155,8 @@ If the reviewer requests changes instead of approving:
 ```bash
 gh pr comment "$PR_URL" --body "**gate:review** — CHANGES REQUESTED. <findings>"
 # Leave gate:review label intact; do NOT remove it.
-# Increment review-pass counter; bd will escalate at pass ≥ 3.
+# Increment review-pass counter; the orchestrator escalates at pass ≥ 3
+# (see "Failure / escalation" below).
 ```
 
 Same pattern for `gate:qa` and `gate:evals` — comment with the verdict,
