@@ -186,4 +186,22 @@ describe('AgentProvider', () => {
     expect(msg.id.length).toBeGreaterThan(0);
     expect(msg.parts).toEqual([{ type: 'text', text: 'why is the sky blue?' }]);
   });
+
+  it('attaches metadata.document with extracted text/title/sourceUrl on success', async () => {
+    vi.mocked(safeFetch).mockResolvedValueOnce(SUCCESSFUL_FETCH);
+    vi.mocked(extractContent).mockReturnValueOnce({ text: 'doc text', title: 'T' });
+    vi.mocked(streamChat).mockResolvedValueOnce(mockUIMessageStreamResponse(['ok']));
+
+    const provider = new AgentProvider();
+    const result = await provider.callApi('', {
+      vars: { kb_url: 'https://example.com', question: 'q' },
+      prompt: { raw: '', label: '' }
+    });
+
+    expect(result.metadata?.document).toEqual({
+      text: 'doc text',
+      title: 'T',
+      sourceUrl: SUCCESSFUL_FETCH.value.finalUrl
+    });
+  });
 });

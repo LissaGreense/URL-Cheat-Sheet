@@ -75,7 +75,16 @@ export default class AgentProvider implements ApiProvider {
     ];
 
     const response = await streamChat(messages, document);
-    return { output: await drainAssistantText(response) };
+    return {
+      output: await drainAssistantText(response),
+      metadata: {
+        document: {
+          text: extractResult.text,
+          title: extractResult.title,
+          sourceUrl: fetchResult.value.finalUrl
+        }
+      }
+    };
   }
 }
 
