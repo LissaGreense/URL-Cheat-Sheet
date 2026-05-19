@@ -4,8 +4,13 @@ import { makeGrepDoc } from '../src/tools/grep-doc.ts';
 import { streamChat } from '../src/agent.ts';
 
 describe('SYSTEM_PROMPT', () => {
-  it('instructs the model to ground every claim via the grep tool', () => {
-    expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/grep/);
+  it('instructs the model to ground claims via grep_doc', () => {
+    expect(SYSTEM_PROMPT).toMatch(/grep_doc/);
+  });
+
+  it('frames tool results as untrusted external data', () => {
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('untrusted');
+    expect(SYSTEM_PROMPT.toLowerCase()).toMatch(/data, not.*instructions/);
   });
 
   it('instructs the model to cite line numbers and avoid markdown', () => {
@@ -15,7 +20,7 @@ describe('SYSTEM_PROMPT', () => {
 });
 
 describe('streamChat', () => {
-  it('is callable with an array of messages', () => {
+  it('is callable (verified at type level)', () => {
     expect(typeof streamChat).toBe('function');
   });
 

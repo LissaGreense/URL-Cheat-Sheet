@@ -4,9 +4,10 @@ import { streamChat } from '@url-cheat-sheet/agent';
 import { chatRequestSchema } from '@url-cheat-sheet/schemas';
 
 /**
- * Chat endpoint. Validates the @ai-sdk/svelte Chat client body, then
- * streams the model response (with the grep_rfc tool wired in) back
- * to the browser via the AI SDK's UI message stream.
+ * Chat endpoint. Validates the @ai-sdk/svelte Chat client body (now
+ * including the per-request grounding document), then streams the model
+ * response (with the grep_doc tool wired in) back to the browser via the
+ * AI SDK's UI message stream.
  */
 export const POST: RequestHandler = async ({ request }) => {
   let raw: unknown;
@@ -28,5 +29,5 @@ export const POST: RequestHandler = async ({ request }) => {
   // Schema validates structure (id, role, parts: unknown[]); AI SDK
   // validates each part shape inside convertToModelMessages. One
   // boundary cast bridges the two type worlds.
-  return streamChat(parsed.data.messages as UIMessage[]);
+  return streamChat(parsed.data.messages as UIMessage[], parsed.data.document);
 };
