@@ -1,5 +1,24 @@
 <!-- v2 - 2026-05-19 - Generated via improving-plans from docs/plans/2026-05-19-grounding-eval-matrix.md -->
 
+> **Post-impl corrigendum (2026-05-20, ucs-zvf):** Two assumptions in this plan
+> were wrong and got fixed during Task 6 of the implementation:
+>
+> 1. **`${REPO_ROOT}` interpolation does NOT work in promptfoo 0.121.11.** The
+>    runner sets the env var, but promptfoo treats `${REPO_ROOT}` literally in
+>    YAML config values. Task 4's runner change is dead code (tracked as
+>    `ucs-dnt` for cleanup).
+> 2. **The relative-path fallback documented below as `file:../../...` is also
+>    wrong** — promptfoo's loader at `dist/src/providers-am7xTa5w.js:23387`
+>    only strips `file://` (two slashes). The working form is
+>    **`file://../../src/providers/agent-provider.ts`** (two slashes, relative
+>    to the config file's directory). This was the form ultimately shipped in
+>    `packages/evals/suites/url-grounding/promptfooconfig.yaml`.
+>
+> The body below preserves what the plan said at authoring time so the
+> reasoning is auditable; the actual implementation deviated as described
+> here. Future plans should use `file://<relative-or-absolute-path>` for
+> promptfoo file references, full stop.
+
 # Broader URL-Grounding Eval Matrix — Implementation Plan (v2)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

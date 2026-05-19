@@ -29,7 +29,7 @@ const outputPath = join(tmpdir(), `promptfoo-${suite}-${Date.now()}.json`);
 const result = spawnSync(
   'bunx',
   ['promptfoo', 'eval', '-c', cfg, '--no-cache', '--output', outputPath],
-  { encoding: 'utf8', cwd: packageRoot, env: { ...process.env, REPO_ROOT: repoRoot } }
+  { encoding: 'utf8', cwd: packageRoot }
 );
 
 // promptfoo exit codes: 0 = all pass, 100 = some tests failed (run completed).
