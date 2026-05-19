@@ -13,9 +13,11 @@
    pre-push hook that blocks direct pushes to `main`. Verify with
    `git config core.hooksPath` (should print `scripts/git-hooks`).
    Then run `bash scripts/setup-bd.sh` to provision the custom bd
-   statuses (`proposed`, `enriched`, `ready`, `in_review`) that the
-   `task-creation`, `task-enrichment`, and `opening-pr-orchestrator`
-   skills depend on. Both scripts are idempotent.
+   statuses (`proposed`, `in_review`) that the `task-creation`,
+   `task-enrichment`, and `opening-pr-orchestrator` skills depend on.
+   (Built-in `open` is the canonical "enriched and claimable" state —
+   see ADR 0006 for why we no longer use custom `enriched`/`ready`.)
+   Both scripts are idempotent.
 5. **For tasks that call a real model** (live QA on the chat UI, eval
    suites under `packages/evals/`, anything hitting `/api/chat` with an
    actual response): the project expects `ANTHROPIC_API_KEY` to be set
