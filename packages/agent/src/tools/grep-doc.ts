@@ -1,6 +1,5 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import rfcText from '../data/rfc2324.txt?raw';
 
 const MAX_MATCHES = 20;
 const CONTEXT_LINES = 2;
@@ -37,13 +36,19 @@ export function grepLines(text: string, pattern: string): GrepMatch[] {
   return matches;
 }
 
-export const grepRfc = tool({
-  description:
-    'Search RFC 2324 (HTCPCP) for a case-insensitive substring. Returns matching lines with up to two lines of surrounding context. Pattern is treated as literal text, not regex.',
-  inputSchema: z.strictObject({
-    pattern: z.string().describe('Case-insensitive substring to search RFC 2324.')
-  }),
-  execute: async ({ pattern }) => ({
-    matches: grepLines(rfcText, pattern)
-  })
-});
+/**
+ * Factory: builds a `grep_doc` AI SDK tool that closes over the provided text.
+ * Use one factory call per chat request (closure-captures that request's document).
+ */
+export function makeGrepDoc(documentText: string) {
+  return tool({
+    description:
+      'Search the loaded document for a case-insensitive substring. Returns matching lines with up to two lines of surrounding context. Pattern is treated as literal text, not regex.',
+    inputSchema: z.strictObject({
+      pattern: z.string().describe('Case-insensitive substring to search the loaded document.')
+    }),
+    execute: async ({ pattern }) => ({
+      matches: grepLines(documentText, pattern)
+    })
+  });
+}
