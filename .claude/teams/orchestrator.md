@@ -14,7 +14,12 @@ For each ready issue:
 
 1. **Create worktree:** `git worktree add ../wt-<id> -b feat/<id>-<slug> main`
 2. **`pr-open`:** invoke `opening-pr-orchestrator` skill, Action 1. Opens draft PR, records URL in bd notes, transitions bd → `in_progress`.
-3. **Spawn team** named in the issue's `team:` label.
+3. **Spawn team** named in the issue's `team:` label. Include the team's
+   "Must-read constraints" section (`.claude/teams/<team>.md`) verbatim
+   in the dispatch prompt so the subagent doesn't re-discover Zod 4 idioms,
+   the Bun SSRF footgun, `chatRequestSchema`-stays-`z.object`, etc. per
+   dispatch. Gate-style teams (review/qa/evals) have no constraints
+   section — skip the inline.
 4. **`pr-ready`:** when team reports success, invoke skill Action 2. Marks PR ready, increments review-pass counter, transitions bd → `in_review`.
 5. **Gate dispatch:** for each `gate:*` label, spawn the corresponding gate agent (review / qa / evals). Each clears its own label.
 6. **`pr-merge`:** when all `gate:*` labels (except `gate:pr`) are cleared and CI is green, invoke skill Action 3. Squash-merges, closes bd, removes worktree.
