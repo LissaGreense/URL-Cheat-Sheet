@@ -62,8 +62,10 @@
       "name": "@url-cheat-sheet/evals",
       "version": "0.0.0",
       "dependencies": {
+        "@ai-sdk/provider-utils": "^4.0.27",
         "@url-cheat-sheet/agent": "workspace:*",
         "@url-cheat-sheet/schemas": "workspace:*",
+        "ai": "^6.0.184",
         "promptfoo": "0.121.11",
         "zod": "^4.4.3",
       },
