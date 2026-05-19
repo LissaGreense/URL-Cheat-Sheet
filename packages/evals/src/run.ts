@@ -23,10 +23,11 @@ if (!suite) {
 const cfg = join(packageRoot, 'suites', suite, 'promptfooconfig.yaml');
 const outputPath = join(tmpdir(), `promptfoo-${suite}-${Date.now()}.json`);
 
+// promptfoo expands `${REPO_ROOT}` in YAML provider refs
 const result = spawnSync(
   'bunx',
   ['promptfoo', 'eval', '-c', cfg, '--no-cache', '--output', outputPath],
-  { encoding: 'utf8' }
+  { encoding: 'utf8', env: { ...process.env, REPO_ROOT: repoRoot } }
 );
 
 if (result.status !== 0) {
