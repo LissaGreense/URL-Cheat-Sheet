@@ -9,6 +9,7 @@
     "eval": "bun src/run.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.78",
     "@ai-sdk/provider-utils": "^4.0.27",
     "@url-cheat-sheet/agent": "workspace:*",
     "@url-cheat-sheet/schemas": "workspace:*",
