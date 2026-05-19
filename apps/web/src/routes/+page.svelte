@@ -1,57 +1,173 @@
 <script lang="ts">
   import { Chat } from '@ai-sdk/svelte';
   import { DefaultChatTransport } from 'ai';
+  import type { Document, ExtractResponse, ExtractError } from '@url-cheat-sheet/schemas';
+
+  type State =
+    | { kind: 'idle' }
+    | { kind: 'extracting'; url: string }
+    | { kind: 'extract-error'; message: string }
+    | { kind: 'flagged'; preview: ExtractResponse }
+    | { kind: 'ready'; document: Document };
+
+  let state = $state<State>({ kind: 'idle' });
+  let urlInput = $state('');
+  let chatInput = $state('');
+
+  let document = $derived(state.kind === 'ready' ? state.document : null);
 
   const chat = new Chat({
-    transport: new DefaultChatTransport({ api: '/api/chat' })
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+      prepareSendMessagesRequest: ({ messages }) => ({
+        body: { messages, document }
+      })
+    })
   });
 
-  let input = $state('');
+  async function loadUrl(e: SubmitEvent) {
+    e.preventDefault();
+    const url = urlInput.trim();
+    if (!url) return;
+    state = { kind: 'extracting', url };
+    try {
+      const res = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        state = { kind: 'extract-error', message: humanizeError(body as ExtractError) };
+        return;
+      }
+      const preview = body as ExtractResponse;
+      if (!preview.scan.safe) {
+        state = { kind: 'flagged', preview };
+        return;
+      }
+      state = {
+        kind: 'ready',
+        document: { text: preview.text, title: preview.title, sourceUrl: preview.sourceUrl }
+      };
+    } catch (err) {
+      state = { kind: 'extract-error', message: 'Network error: ' + String(err) };
+    }
+  }
 
-  function onSubmit(event: SubmitEvent) {
-    event.preventDefault();
-    const text = input.trim();
-    if (!text) return;
+  function confirmFlagged() {
+    if (state.kind !== 'flagged') return;
+    const { preview } = state;
+    state = {
+      kind: 'ready',
+      document: { text: preview.text, title: preview.title, sourceUrl: preview.sourceUrl }
+    };
+  }
+
+  function reset() {
+    state = { kind: 'idle' };
+    urlInput = '';
+    chat.messages = [];
+  }
+
+  function sendChat(e: SubmitEvent) {
+    e.preventDefault();
+    const text = chatInput.trim();
+    if (!text || state.kind !== 'ready') return;
     chat.sendMessage({ text });
-    input = '';
+    chatInput = '';
+  }
+
+  function humanizeError(err: ExtractError): string {
+    switch (err.kind) {
+      case 'FETCH_TIMEOUT':
+        return 'The page took too long to load.';
+      case 'FETCH_TOO_LARGE':
+        return 'The page is too large to load.';
+      case 'FETCH_BLOCKED_URL':
+        return 'That URL is not allowed.';
+      case 'FETCH_UNSUPPORTED_CONTENT_TYPE':
+        return 'Only HTML pages are supported.';
+      case 'FETCH_HTTP_ERROR':
+        return 'The page server returned an error.';
+      case 'FETCH_NETWORK':
+        return 'Could not reach the page.';
+      case 'EMPTY_EXTRACTION':
+        return 'Could not extract readable content (the page may be JavaScript-rendered).';
+      case 'PARSE_FAILED':
+        return 'Could not parse the page.';
+    }
   }
 </script>
 
 <main class="container">
-  <h1>URL Cheat Sheet — RFC 2324</h1>
-  <p class="hint">
-    Ask anything about the Hyper Text Coffee Pot Control Protocol. Answers are grounded in the
-    bundled RFC 2324 text.
-  </p>
+  <h1>URL Cheat Sheet</h1>
 
-  <ol class="messages">
-    {#each chat.messages as message (message.id)}
-      <li class="message message--{message.role}">
-        <span class="role">{message.role}</span>
-        {#each message.parts as part, i (i)}
-          {#if part.type === 'text'}
-            <p class="text">{part.text}</p>
-          {:else if part.type?.startsWith('tool-')}
-            <details class="tool">
-              <summary>tool call: {part.type}</summary>
-              <pre>{JSON.stringify(part, null, 2)}</pre>
-            </details>
-          {/if}
+  {#if state.kind === 'idle'}
+    <p class="hint">Paste a URL to start chatting about a page.</p>
+    <form onsubmit={loadUrl} class="composer">
+      <input type="url" bind:value={urlInput} placeholder="https://..." aria-label="Page URL" />
+      <button type="submit" disabled={!urlInput.trim()}>Load page</button>
+    </form>
+  {:else if state.kind === 'extracting'}
+    <p class="hint">Loading {state.url}…</p>
+  {:else if state.kind === 'extract-error'}
+    <p class="error">{state.message}</p>
+    <button type="button" onclick={reset}>Try a different URL</button>
+  {:else if state.kind === 'flagged'}
+    <section class="flagged">
+      <h2>⚠ Possible prompt-injection patterns detected</h2>
+      <p><strong>Page:</strong> {state.preview.title}</p>
+      <p><strong>URL:</strong> {state.preview.sourceUrl}</p>
+      <p>Detected:</p>
+      <ul>
+        {#each state.preview.scan.threats as t (t.type + t.severity)}
+          <li>{t.type} (severity {t.severity.toFixed(2)})</li>
         {/each}
-      </li>
-    {/each}
-  </ol>
+      </ul>
+      <p class="hint">
+        This often happens with pages that discuss AI security or quote attack examples. Your chat
+        will treat this page as an untrusted source whether or not you continue.
+      </p>
+      <button type="button" onclick={confirmFlagged}>Continue with this page</button>
+      <button type="button" onclick={reset}>Use a different URL</button>
+    </section>
+  {:else if state.kind === 'ready'}
+    <p class="chip">
+      Grounded in: <strong>{state.document.title}</strong> ·
+      <button type="button" class="link" onclick={reset}>change</button>
+    </p>
 
-  <form onsubmit={onSubmit} class="composer">
-    <input
-      type="text"
-      bind:value={input}
-      placeholder="Ask about RFC 2324..."
-      aria-label="Message"
-      disabled={chat.status === 'streaming' || chat.status === 'submitted'}
-    />
-    <button type="submit" disabled={!input.trim() || chat.status === 'streaming'}>Send</button>
-  </form>
+    <ol class="messages">
+      {#each chat.messages as message (message.id)}
+        <li class="message message--{message.role}">
+          <span class="role">{message.role}</span>
+          {#each message.parts as part, i (i)}
+            {#if part.type === 'text'}
+              <p class="text">{part.text}</p>
+            {:else if part.type?.startsWith('tool-')}
+              <details class="tool">
+                <summary>tool call: {part.type}</summary>
+                <pre>{JSON.stringify(part, null, 2)}</pre>
+              </details>
+            {/if}
+          {/each}
+        </li>
+      {/each}
+    </ol>
+
+    <form onsubmit={sendChat} class="composer">
+      <input
+        type="text"
+        bind:value={chatInput}
+        placeholder="Ask about this page..."
+        aria-label="Message"
+        disabled={chat.status === 'streaming' || chat.status === 'submitted'}
+      />
+      <button type="submit" disabled={!chatInput.trim() || chat.status === 'streaming'}>Send</button
+      >
+    </form>
+  {/if}
 </main>
 
 <style>
@@ -64,6 +180,23 @@
   .hint {
     color: #666;
     font-size: 0.9rem;
+  }
+  .error {
+    color: #b00;
+  }
+  .chip {
+    background: #f0f0f0;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+  .flagged {
+    border: 1px solid #e0a;
+    padding: 1rem;
+    border-radius: 6px;
+  }
+  .flagged h2 {
+    margin-top: 0;
   }
   .messages {
     list-style: none;
@@ -109,5 +242,13 @@
     flex: 1;
     padding: 0.5rem;
     font-size: 1rem;
+  }
+  .link {
+    background: none;
+    border: none;
+    color: #06c;
+    cursor: pointer;
+    padding: 0;
+    font-size: inherit;
   }
 </style>
