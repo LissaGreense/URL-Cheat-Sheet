@@ -54,4 +54,5 @@ export type ScanResult = z.infer<typeof scanResultSchema>;
 export type Document = z.infer<typeof documentSchema>;
 export type ExtractRequest = z.infer<typeof extractRequestSchema>;
 export type ExtractResponse = z.infer<typeof extractResponseSchema>;
+export type ExtractErrorKind = z.infer<typeof extractErrorKindSchema>;
 export type ExtractError = z.infer<typeof extractErrorSchema>;

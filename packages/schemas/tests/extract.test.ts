@@ -10,21 +10,42 @@ import {
 
 describe('threatSchema', () => {
   it('accepts a valid threat', () => {
-    expect(() =>
-      threatSchema.parse({ type: 'instruction-override', severity: 0.9 })
-    ).not.toThrow();
+    expect(() => threatSchema.parse({ type: 'instruction-override', severity: 0.9 })).not.toThrow();
   });
 
   it('rejects severity > 1', () => {
-    expect(() =>
-      threatSchema.parse({ type: 'instruction-override', severity: 1.5 })
-    ).toThrow();
+    expect(() => threatSchema.parse({ type: 'instruction-override', severity: 1.5 })).toThrow();
+  });
+
+  it('rejects severity < 0', () => {
+    expect(() => threatSchema.parse({ type: 'instruction-override', severity: -0.1 })).toThrow();
   });
 
   it('rejects unknown threat type', () => {
+    expect(() => threatSchema.parse({ type: 'mind-control', severity: 0.5 })).toThrow();
+  });
+});
+
+describe('scanResultSchema', () => {
+  it('accepts a clean (safe) scan', () => {
+    expect(() => scanResultSchema.parse({ safe: true, threats: [] })).not.toThrow();
+  });
+
+  it('accepts a flagged scan with threats', () => {
     expect(() =>
-      threatSchema.parse({ type: 'mind-control', severity: 0.5 })
-    ).toThrow();
+      scanResultSchema.parse({
+        safe: false,
+        threats: [{ type: 'leak', severity: 0.7 }]
+      })
+    ).not.toThrow();
+  });
+
+  it('rejects missing safe field (strictObject)', () => {
+    expect(() => scanResultSchema.parse({ threats: [] })).toThrow();
+  });
+
+  it('rejects extra fields (strictObject)', () => {
+    expect(() => scanResultSchema.parse({ safe: true, threats: [], extra: 'nope' })).toThrow();
   });
 });
 
@@ -40,17 +61,13 @@ describe('documentSchema', () => {
   });
 
   it('rejects non-URL sourceUrl', () => {
-    expect(() =>
-      documentSchema.parse({ text: '', title: '', sourceUrl: 'not a url' })
-    ).toThrow();
+    expect(() => documentSchema.parse({ text: '', title: '', sourceUrl: 'not a url' })).toThrow();
   });
 });
 
 describe('extractRequestSchema', () => {
   it('rejects extra fields (strictObject)', () => {
-    expect(() =>
-      extractRequestSchema.parse({ url: 'https://x.com/', extra: 'nope' })
-    ).toThrow();
+    expect(() => extractRequestSchema.parse({ url: 'https://x.com/', extra: 'nope' })).toThrow();
   });
 });
 
@@ -95,9 +112,7 @@ describe('extractErrorSchema', () => {
       'EMPTY_EXTRACTION',
       'PARSE_FAILED'
     ] as const) {
-      expect(() =>
-        extractErrorSchema.parse({ kind, message: 'm' })
-      ).not.toThrow();
+      expect(() => extractErrorSchema.parse({ kind, message: 'm' })).not.toThrow();
     }
   });
 });
