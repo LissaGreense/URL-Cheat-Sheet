@@ -23,14 +23,21 @@ if (!suite) {
 const cfg = join(packageRoot, 'suites', suite, 'promptfooconfig.yaml');
 const outputPath = join(tmpdir(), `promptfoo-${suite}-${Date.now()}.json`);
 
-// promptfoo expands `${REPO_ROOT}` in YAML provider refs
+// Run from packageRoot so bunx resolves the locally-installed promptfoo
+// (and the workspace symlinks the provider needs) instead of downloading
+// a stand-alone copy that can't see `@url-cheat-sheet/*`.
 const result = spawnSync(
   'bunx',
   ['promptfoo', 'eval', '-c', cfg, '--no-cache', '--output', outputPath],
-  { encoding: 'utf8', env: { ...process.env, REPO_ROOT: repoRoot } }
+  { encoding: 'utf8', cwd: packageRoot, env: { ...process.env, REPO_ROOT: repoRoot } }
 );
 
-if (result.status !== 0) {
+// promptfoo exit codes: 0 = all pass, 100 = some tests failed (run completed).
+// Both produce a valid output file we want to snapshot. Anything else (1, 2, …)
+// is a real harness error — bubble it up without writing a misleading snapshot.
+const RUN_COMPLETED_CODES = new Set([0, 100]);
+if (!RUN_COMPLETED_CODES.has(result.status ?? -1)) {
+  console.error(result.stdout);
   console.error(result.stderr);
   process.exit(result.status ?? 1);
 }

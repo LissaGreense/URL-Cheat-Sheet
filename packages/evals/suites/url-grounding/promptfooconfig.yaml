@@ -1,6 +1,6 @@
 description: URL-grounded chat — broader grounding matrix
 providers:
-  - id: 'file:${REPO_ROOT}/packages/evals/src/providers/agent-provider.ts'
+  - id: 'file://../../src/providers/agent-provider.ts'
 prompts:
   - '{{question}}'
 defaultTest:
