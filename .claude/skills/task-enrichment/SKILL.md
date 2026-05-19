@@ -23,10 +23,25 @@ For each `proposed` issue (use `bd list --status proposed --json`):
    - `packages/qa/**` → either `qa-team` (cases) or `frontend-impl-team` (helpers); ask if ambiguous
    - `packages/evals/**` → `evals-team`
    - workflow / `.claude/**` / `docs/**` / CI / scaffolding → `orchestrator`
-3. **Pick gates** based on stage type:
-   - UI/UX user-facing change → `gate:qa`
-   - Agent/prompt/tool change → `gate:evals`
-   - All non-trivial code → `gate:review`
+3. **Pick gates** based on stage type. A gate must be **exercisable** by
+   the time the issue merges — apply only if you can point to the
+   concrete artifact that will clear it:
+   - UI/UX user-facing change → `gate:qa` — only if a QA case exists at
+     `docs/qa/cases/<feature>.md` *or* this task itself authors one. If
+     the case doesn't yet exist and won't exist by merge time, omit
+     `gate:qa` and file a follow-up bd issue ("Author QA case for
+     <feature>"), referenced in the notes.
+   - Agent/prompt/tool change → `gate:evals` — only if an eval suite
+     exists at `packages/evals/suites/<name>/` *or* a depended-on task
+     scaffolds it before this one merges. If the task itself is the
+     scaffold, do **not** apply `gate:evals` to it — a scaffold task
+     can't be gated on the artifact it creates. (Concretely: the task
+     that adds `packages/evals/suites/foo/` doesn't get `gate:evals`;
+     the first downstream task that exercises foo's prompts does.) If
+     agent code changes ahead of any eval coverage, omit `gate:evals`
+     and file a follow-up bd issue, then reference it in the notes.
+   - All non-trivial code → `gate:review`. Always exercisable — a
+     reviewer is a person/agent, not an artifact.
 4. **Write enriched body**, replacing the original:
 
    ```
@@ -65,3 +80,9 @@ When `bd list --status proposed` returns empty.
 - Transition to `open`, not `in_progress`. The orchestrator's `pr-open` action
   is what flips an issue to `in_progress` (it does that when the draft PR is created).
 - If acceptance criteria cannot be inferred from the plan task, escalate to the user — do not invent them.
+- **Gates must be exercisable.** A `gate:*` label whose executor doesn't
+  exist by merge time defeats the gate — the orchestrator's `pr-merge`
+  preflight either aborts (forcing a manual clear) or, if the operator
+  clears it without running the gate, hides a regression. Don't apply
+  a gate you can't point at a clearing artifact for; file a follow-up
+  bd issue instead.
