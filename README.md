@@ -13,6 +13,7 @@ brainstormed using the workflow this skeleton ships.
 ```bash
 bun install
 bash scripts/setup-git-hooks.sh   # one-shot: wire pre-push hook (blocks push-to-main)
+bash scripts/setup-bd.sh          # one-shot: provision custom bd statuses for the agentic workflow
 bun run dev                       # SvelteKit on http://localhost:5173
 ```
 
