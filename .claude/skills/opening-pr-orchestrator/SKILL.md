@@ -27,6 +27,13 @@ ID="$1"   # bd issue id, e.g. ucs-6ci
 SLUG="$(bd show "$ID" --json | jq -r '.[0].title' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | tr -s '-' | sed 's/^-//;s/-$//')"
 TYPE="$(bd show "$ID" --json | jq -r '.[0].issue_type' | sed 's/feature/feat/;s/bug/fix/;s/task/chore/')"
 
+# Symlink the user-managed .env (per CLAUDE.md, never created by agents) so
+# QA/eval gates that read ANTHROPIC_API_KEY from cwd work inside the worktree.
+# Absolute target keeps the symlink valid even if the worktree dir is moved.
+# .env is gitignored, so the symlink is never committed.
+REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
+[ -f "$REPO_ROOT/.env" ] && ln -sf "$REPO_ROOT/.env" .env
+
 # Seed an empty commit so GH accepts the PR (it refuses no-diff PRs).
 git commit --allow-empty -m "chore($ID): open draft PR for orchestrator tracking"
 
