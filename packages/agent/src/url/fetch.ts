@@ -1,5 +1,4 @@
-import { isIP } from 'node:net';
-import { resolveAndPin, SsrfBlockedError } from './ssrf';
+import { validateHostIsPublic, SsrfBlockedError } from './ssrf';
 
 export const FETCH_DEFAULTS = {
   timeoutMs: 10_000,
@@ -91,9 +90,25 @@ function decode(bytes: Uint8Array, charset: string): string {
 
 /**
  * Fetch a URL with composed SSRF, timeout, size, content-type, and redirect
- * guards. Uses Bun's native global `fetch` with `redirect: 'manual'` so each
- * hop can be re-validated against the full guard set. Never imports
- * `undici.Agent` / `http.Agent` — those silently no-op on Bun.
+ * guards. Validates that the URL's host resolves to public unicast IPs only,
+ * then calls `fetch` with the original URL. Uses `redirect: 'manual'` so each
+ * hop re-runs `validateHostIsPublic` against the next target.
+ *
+ * A small TOCTOU rebinding window exists between our DNS check and `fetch`'s
+ * connect-time resolution; mitigated in practice by short DNS TTLs and the
+ * fact that this fetcher runs in Vercel serverless (no VPC routes to internal
+ * services). The alternative — rewriting the URL hostname to a pinned IP and
+ * forwarding the original host via the `Host` header — breaks under
+ * Node/undici because undici drives TLS SNI from the URL hostname, producing
+ * `ssl/tls alert handshake failure` against any origin that requires correct
+ * SNI (Cloudflare, GitHub Pages, etc.). The portable shape below works on
+ * BOTH Bun and Node.
+ *
+ * CRITICAL FOOTGUN: Never reach for `undici.Agent` / `http.Agent` /
+ * `connect.servername` tricks to keep the pinning approach alive on Node —
+ * those constructs silently no-op on Bun (Bun's `fetch` ignores Node agents),
+ * so any "fix" using them regresses Bun. Keep this implementation runtime-
+ * agnostic.
  *
  * Returns a discriminated union; the caller pattern-matches `result.ok`.
  */
@@ -113,20 +128,16 @@ export async function safeFetch(input: string, init: RequestInit = {}): Promise<
 
     const host = target.hostname.replace(/^\[|\]$/g, '');
 
-    let pinned: string;
     try {
-      pinned = await resolveAndPin(host);
+      await validateHostIsPublic(host);
     } catch (e) {
       if (e instanceof SsrfBlockedError) return blocked('private_ip');
       return { ok: false, error: { kind: 'FETCH_NETWORK', message: String(e) } };
     }
 
-    const pinnedUrl = new URL(target);
-    pinnedUrl.hostname = isIP(pinned) === 6 ? `[${pinned}]` : pinned;
-
     let res: Response;
     try {
-      res = await fetch(pinnedUrl, {
+      res = await fetch(target, {
         ...init,
         method: 'GET',
         redirect: 'manual',
@@ -134,7 +145,6 @@ export async function safeFetch(input: string, init: RequestInit = {}): Promise<
         signal: AbortSignal.timeout(FETCH_DEFAULTS.timeoutMs),
         headers: {
           ...init.headers,
-          host: target.host,
           'user-agent': FETCH_DEFAULTS.userAgent
         }
       });
@@ -181,7 +191,7 @@ export async function safeFetch(input: string, init: RequestInit = {}): Promise<
       value: {
         html,
         contentType,
-        finalUrl: pinnedUrl.toString(),
+        finalUrl: target.toString(),
         byteSize: bytes.byteLength
       }
     };
