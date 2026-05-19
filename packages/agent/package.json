@@ -17,6 +17,10 @@
     "ai": "^6.0.184",
     "@ai-sdk/anthropic": "^3.0.78",
     "@ai-sdk/openai": "^3.0.64",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@mozilla/readability": "0.6.0",
+    "linkedom": "0.18.12",
+    "@andersmyrmel/vard": "1.2.0",
+    "ipaddr.js": "2.4.0"
   }
 }
