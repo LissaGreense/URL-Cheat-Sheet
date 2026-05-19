@@ -12,6 +12,13 @@
    `bash scripts/setup-git-hooks.sh` to wire the version-controlled
    pre-push hook that blocks direct pushes to `main`. Verify with
    `git config core.hooksPath` (should print `scripts/git-hooks`).
+5. **For local QA/eval runs:** copy `.env.example` to `.env` and fill
+   in `ANTHROPIC_API_KEY`. Bun and Vite auto-load `.env` from the repo
+   root, so the dev server and `bun --filter @url-cheat-sheet/evals
+   eval <suite>` both pick up the key without further configuration.
+   `.env` is gitignored. When you create a worktree, copy or symlink
+   the parent repo's `.env` into it (`ln -s ../URL-Cheat-Sheet/.env
+   .env`) — bun does not walk to sibling directories.
 
 ## Hard rules
 

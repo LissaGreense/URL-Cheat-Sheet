@@ -13,8 +13,15 @@ brainstormed using the workflow this skeleton ships.
 ```bash
 bun install
 bash scripts/setup-git-hooks.sh   # one-shot: wire pre-push hook (blocks push-to-main)
+cp .env.example .env              # one-shot: fill in ANTHROPIC_API_KEY
 bun run dev                       # SvelteKit on http://localhost:5173
 ```
+
+`.env` is gitignored. Bun and Vite both auto-load it from the repo root,
+so neither the dev server nor `bun --filter @url-cheat-sheet/evals eval <suite>`
+needs the key exported in your shell. Agents driving the workflow rely
+on this file so they can run QA and evals end-to-end without a human in
+the loop.
 
 ## Run all CI checks locally
 
