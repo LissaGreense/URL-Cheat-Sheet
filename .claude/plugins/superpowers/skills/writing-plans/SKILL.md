@@ -5,6 +5,13 @@ description: Use when you have a spec or requirements for a multi-step task, bef
 
 # Writing Plans
 
+> **Project override (URL-Cheat-Sheet):** the "Complete code in every step"
+> and "code blocks required for code steps" rules below are softened in this
+> repo per `using-this-repo`'s "Plan-writing conventions". Plans here
+> specify signatures + acceptance criteria + edge cases; the impl team
+> writes implementation bodies against installed deps. See ucs-mmj for the
+> four-incident postmortem that motivated the carve-out.
+
 ## Overview
 
 Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
@@ -110,12 +117,12 @@ Every step must contain the actual content an engineer needs. These are **plan f
 - "Add appropriate error handling" / "add validation" / "handle edge cases"
 - "Write tests for the above" (without actual test code)
 - "Similar to Task N" (repeat the code — the engineer may be reading tasks out of order)
-- Steps that describe what to do without showing how (code blocks required for code steps)
+- Steps that describe what to do without showing how (code blocks required for code steps — softened in URL-Cheat-Sheet, see top-of-file override)
 - References to types, functions, or methods not defined in any task
 
 ## Remember
 - Exact file paths always
-- Complete code in every step — if a step changes code, show the code
+- Complete code in every step — if a step changes code, show the code (softened in URL-Cheat-Sheet, see top-of-file override)
 - Exact commands with expected output
 - DRY, YAGNI, TDD, frequent commits
 

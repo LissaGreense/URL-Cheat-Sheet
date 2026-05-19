@@ -59,6 +59,40 @@ through (ucs-0z5).
 | 9 | **PR merge** | inline orchestrator action |
 | 10 | Learnings | `superpowers:remembering-learnings` |
 
+## Plan-writing conventions
+
+When writing a plan (`superpowers:writing-plans`) for this repo, **prefer
+specifying interfaces over verbatim implementation code**. Plans here have
+historically embedded full code blocks that the impl team is told to
+follow literally — and several have been wrong in non-obvious ways (wrong
+discriminated-union field names, `as const` narrowing surprises, type defs
+that don't match the installed dep version). Each defect costs a fix-pass
+and burns reviewer cycles.
+
+For each task, write:
+
+- **Function/method signatures** (types, return shape) — these are what
+  the team owning the schemas (`.claude/teams/schemas-team.md`) and the
+  team owning the implementation surface coordinate on.
+- **Acceptance criteria** — what the function does, edge cases it handles.
+- **Affected files** — paths and create/modify/delete intent.
+- **Library calls — name the library + method, but DO NOT paste a call
+  site verbatim unless you've just run it.** Library APIs drift; the
+  impl agent should grep the installed `.d.ts` rather than copy from a
+  plan written before the dep was upgraded. *This is the sharpest of
+  the four bullets — three of the four ucs-mmj incidents traced to
+  exactly this drift.*
+
+Skip:
+
+- Multi-line implementation bodies. The impl team writes those against
+  the actual installed deps. If a plan does include a body, treat it as
+  illustrative, not authoritative — the impl agent reconciles against
+  the type-checker.
+- Test bodies and fixture files. Generate during impl; freshness matters.
+
+See ucs-mmj for the four-incident postmortem that motivated this rule.
+
 ## Hard rules
 
 - `bd` v1.x (>= 1.0.2): worktree-safe by default — no flags needed. `--no-daemon` was removed upstream and errors.
