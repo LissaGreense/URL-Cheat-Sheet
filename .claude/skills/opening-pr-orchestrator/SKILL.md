@@ -132,5 +132,6 @@ Quick reference:
 4. **Do not use `gh pr merge --auto`** for chore PRs you open outside
    the orchestrator pipeline. Auto-merge fires whenever the PR becomes
    mergeable in GitHub's eyes, regardless of CI conclusion (no GH
-   required checks per ADR 0005 — see ucs-0z5). Run the same
-   `statusCheckRollup` preflight as Action 3 before `gh pr merge`.
+   required checks per ADR 0005). Use
+   `bash scripts/safe-merge.sh <pr> [--wait]` — it runs the same
+   `statusCheckRollup` preflight as Action 3 and refuses on red CI.

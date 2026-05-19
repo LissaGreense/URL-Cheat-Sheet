@@ -67,3 +67,26 @@ is unaffected by the Pro gate — those run on every PR via `ci.yml` and a PR
 cannot be merged through the UI if they fail. So even without server-side
 branch protection, CI gates ARE enforced on PRs; the local hook just prevents
 the "no PR at all" failure mode.
+
+## Addendum (2026-05-19): CI-side enforcement claim was overstated
+
+The 2026-05-18 addendum claimed "a PR cannot be merged through the UI if
+[CI checks] fail" and concluded that CI gates ARE enforced on PRs without
+branch protection. That's wrong in practice. PR #8 merged via
+`gh pr merge --auto --squash` while `lint=FAILURE`. GitHub's UI may disable
+the merge button on red CI, but `--auto` and the merge API bypass that gate.
+
+Without server-side required checks (which remain unavailable on free-tier
+private), there is **no** GitHub-side enforcement that blocks merging red
+PRs. Enforcement is local and convention-based:
+
+- The orchestrator skill's `pr-merge` action has a `statusCheckRollup`
+  preflight that refuses to merge unless every check is `SUCCESS` or
+  `SKIPPED` (see `.claude/skills/opening-pr-orchestrator/SKILL.md`).
+- For chore PRs not driven by the orchestrator, use the wrapper
+  `bash scripts/safe-merge.sh <pr> [--wait]` (ucs-0z5). It runs the same
+  preflight before `gh pr merge`. Do NOT use `gh pr merge --auto` here.
+
+If the repo upgrades to GH Pro or goes public, applying
+`scripts/branch-protection.json` makes server-side required checks
+authoritative and the local preflight becomes defense-in-depth.
