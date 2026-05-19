@@ -1,4 +1,5 @@
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from 'promptfoo';
+import { extractContent, safeFetch } from '@url-cheat-sheet/agent';
 
 const DEFAULT_PROVIDER_ID = 'url-cheat-sheet:agent';
 
@@ -10,9 +11,12 @@ const DEFAULT_PROVIDER_ID = 'url-cheat-sheet:agent';
  * constructor accepts a single options object and stores the id for
  * later retrieval via `id()`.
  *
- * This scaffold validates the required `vars` (`kb_url`, `question`)
- * and returns a structured error when either is missing. The real
- * fetch / extract / streamChat pipeline is added in subsequent tasks.
+ * `callApi` validates the required `vars` (`kb_url`, `question`), then
+ * runs the agent's URL pipeline: `safeFetch` to retrieve the page, and
+ * `extractContent` to pull the main article text. Failures from either
+ * stage are surfaced as `{ error }` containing the discriminator `kind`
+ * so promptfoo's UI shows actionable diagnostics. The streamChat hop is
+ * added in a subsequent task.
  */
 export default class AgentProvider implements ApiProvider {
   private readonly providerId: string;
@@ -39,6 +43,27 @@ export default class AgentProvider implements ApiProvider {
       return { error: 'AgentProvider: missing or invalid question in context.vars' };
     }
 
-    return { error: 'AgentProvider: pipeline not yet implemented' };
+    const fetchResult = await safeFetch(kb_url);
+    if (!fetchResult.ok) {
+      return { error: `AgentProvider: safeFetch failed (${formatFetchError(fetchResult.error)})` };
+    }
+
+    const extractResult = extractContent(fetchResult.value.html, fetchResult.value.finalUrl);
+    // ExtractError is discriminated from ExtractResult by the presence of `kind`;
+    // ExtractResult is `{ text, title }` with no `kind` field.
+    if ('kind' in extractResult) {
+      return { error: `AgentProvider: extractContent failed (${extractResult.kind})` };
+    }
+
+    return { error: 'AgentProvider: streamChat not yet implemented' };
   }
+}
+
+type FetchFailureError = Extract<Awaited<ReturnType<typeof safeFetch>>, { ok: false }>['error'];
+
+function formatFetchError(error: FetchFailureError): string {
+  if (error.kind === 'FETCH_BLOCKED_URL') {
+    return `${error.kind} ${error.reason}`;
+  }
+  return error.kind;
 }

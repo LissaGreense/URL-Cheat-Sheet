@@ -9,6 +9,7 @@
     "eval": "bun src/run.ts"
   },
   "dependencies": {
+    "@url-cheat-sheet/agent": "workspace:*",
     "@url-cheat-sheet/schemas": "workspace:*",
     "promptfoo": "0.121.11",
     "zod": "^4.4.3"
