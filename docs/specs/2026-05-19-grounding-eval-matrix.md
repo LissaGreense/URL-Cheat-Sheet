@@ -1,5 +1,14 @@
 # Spec: broader grounding eval matrix
 
+> **Post-impl corrigendum (2026-05-20, ucs-zvf):** The "Suite shape" section
+> below shows `id: file:../../src/providers/agent-provider.ts`. This single-
+> slash form does NOT work — promptfoo's loader only strips `file://` (two
+> slashes). The actual implementation ships `file://../../...` (two slashes,
+> relative to the config file directory). The `${REPO_ROOT}` env-var
+> interpolation discussed in the companion plan also does not work in
+> promptfoo 0.121.11. Future specs/plans should specify
+> `file://<relative-or-absolute-path>` for promptfoo file refs.
+
 **Date:** 2026-05-19
 **Status:** Draft — pending review
 **Followup of:** `docs/plans/2026-05-19-url-fetcher.v2.md` § "Follow-up `bd` issues"
