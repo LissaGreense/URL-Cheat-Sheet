@@ -8,3 +8,4 @@ export {
   type FetchSuccess,
   type FetchFailure
 } from './url/fetch';
+export { extractContent, type ExtractResult, type ExtractError } from './url/extract';
