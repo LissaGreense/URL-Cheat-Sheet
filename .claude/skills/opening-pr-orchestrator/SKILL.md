@@ -34,6 +34,11 @@ TYPE="$(bd show "$ID" --json | jq -r '.[0].issue_type' | sed 's/feature/feat/;s/
 REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
 [ -f "$REPO_ROOT/.env" ] && ln -sf "$REPO_ROOT/.env" .env
 
+# Tighten .beads/ perms to silence bd's "0755 (recommended: 0700)" warning that
+# would otherwise fire on every bd invocation in this worktree. Git creates
+# worktrees with 0755; bd expects 0700. Idempotent.
+[ -d .beads ] && chmod 700 .beads
+
 # Seed an empty commit so GH accepts the PR (it refuses no-diff PRs).
 git commit --allow-empty -m "chore($ID): open draft PR for orchestrator tracking"
 
