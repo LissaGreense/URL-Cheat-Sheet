@@ -15,12 +15,20 @@ Run inside the worktree directory (`../wt-<id>`). Scripts live at the
 worktree root (e.g. `scripts/render-pr-body.sh`) — the worktree is a
 full working tree, no `../../` traversal needed.
 
+A freshly-created worktree branch is identical to `main`, so GitHub
+refuses `gh pr create` until at least one commit lands on the branch.
+The recipe seeds an empty bootstrap commit so the PR can open before
+the impl team writes any code.
+
 ```bash
 ID="$1"   # bd issue id, e.g. ucs-6ci
 
 # Derive SLUG and TYPE from the bd issue so pr-open is self-contained.
 SLUG="$(bd show "$ID" --json | jq -r '.[0].title' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | tr -s '-' | sed 's/^-//;s/-$//')"
 TYPE="$(bd show "$ID" --json | jq -r '.[0].issue_type' | sed 's/feature/feat/;s/bug/fix/;s/task/chore/')"
+
+# Seed an empty commit so GH accepts the PR (it refuses no-diff PRs).
+git commit --allow-empty -m "chore($ID): open draft PR for orchestrator tracking"
 
 git push -u origin "feat/$ID-$SLUG"
 gh pr create \
@@ -39,50 +47,66 @@ bd update "$ID" --add-label "gate:pr"  # meta-gate; cleared only in pr-merge aft
 
 Run inside the worktree directory.
 
+bd stores `notes` as a single newline-delimited string, not an array,
+so the PR URL extraction uses a regex over the raw text rather than
+JSONL traversal. The timestamp uses portable `date -u +%FT%TZ` (GNU
+`date -Is` is rejected by BSD date on macOS).
+
 ```bash
 ID="$1"
-PR_URL="$(bd show "$ID" --json | jq -r '.[0].notes[]? | .body | select(test("^PR: "))' | head -1 | cut -d' ' -f2)"
-N=$(($(bd show "$ID" --json | jq '.[0].notes[]? | .body | select(test("review-pass:.*submitted"))' | wc -l) + 1))
+PR_URL="$(bd show "$ID" --json | jq -r '.[0].notes' | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)"
+N=$(($(bd show "$ID" --json | jq -r '.[0].notes' | grep -c '^review-pass:.*submitted') + 1))
 
 gh pr ready "$PR_URL"
 gh pr edit "$PR_URL" --body "$(scripts/render-pr-body.sh "$ID")"
-bd update "$ID" --append-note "review-pass:$N — submitted by impl-team @ $(date -Is)"
+bd update "$ID" --append-notes "review-pass:$N — submitted by impl-team @ $(date -u +%FT%TZ)"
 bd update "$ID" --status in_review
 ```
 
 ## Action 3: `pr-merge` — squash-merge after gates clear
 
-Starts inside the worktree (to read its checkout), but transitions to
-the main repo root partway through so `git worktree remove` can delete
-the worktree (git refuses to remove the worktree you're standing in).
+Starts inside the worktree, then transitions to the main repo root so
+the worktree can be removed (git refuses to remove the worktree you're
+standing in, and refuses to delete a branch held by a worktree).
+
+This repo intentionally does NOT configure GitHub branch protection
+required checks (see ADR 0005), so `gh pr checks --required` is always
+empty here. The preflight reads `statusCheckRollup` directly and
+treats `SKIPPED` as acceptable (e.g. `eval-gate` skips on non-agent PRs).
 
 ```bash
 ID="$1"
-PR_URL="$(bd show "$ID" --json | jq -r '.[0].notes[]? | .body | select(test("^PR: "))' | head -1 | cut -d' ' -f2)"
+PR_URL="$(bd show "$ID" --json | jq -r '.[0].notes' | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)"
 
 # Preflight: every condition must hold or we abort.
-# Empty --required output means branch protection is misconfigured (no checks declared) — fail closed.
-CHECKS="$(gh pr checks "$PR_URL" --required --json state -q '.[].state')"
-[ -z "$CHECKS" ] && { echo "abort: no required checks reported (branch protection misconfigured?)"; exit 1; }
-echo "$CHECKS" | grep -qv '^SUCCESS$' && { echo "abort: CI not green"; exit 1; }
+ROLLUP="$(gh pr view "$PR_URL" --json statusCheckRollup -q '.statusCheckRollup[] | .conclusion')"
+[ -z "$ROLLUP" ] && { echo "abort: no CI checks reported on $PR_URL"; exit 1; }
+echo "$ROLLUP" | grep -qvE '^(SUCCESS|SKIPPED)$' && { echo "abort: CI not green"; exit 1; }
 
 REMAINING_GATES="$(bd show "$ID" --json | jq -r '.[0].labels[]? | select(test("^gate:"))' | grep -v '^gate:pr$' || true)"
-[ -n "$REMAINING_GATES" ] && {
-  echo "abort: bd gates still open: $REMAINING_GATES"; exit 1; }
+[ -n "$REMAINING_GATES" ] && { echo "abort: bd gates still open: $REMAINING_GATES"; exit 1; }
 
 STATUS="$(bd show "$ID" --json | jq -r '.[0].status')"
-[ "$STATUS" != "in_review" ] && {
-  echo "abort: bd status is '$STATUS', expected in_review"; exit 1; }
+[ "$STATUS" != "in_review" ] && { echo "abort: bd status is '$STATUS', expected in_review"; exit 1; }
 
-# Step out of the worktree so we can remove it after the merge.
+# Step out of the worktree before removing it (git refuses to remove
+# the worktree you're standing in or to delete a branch a worktree holds).
 cd "$(git rev-parse --git-common-dir)/.."   # → main repo root
+git worktree remove "../wt-$ID" --force
 
-# Merge
+# Merge — safe to use --delete-branch now that the worktree is gone.
 gh pr merge "$PR_URL" --squash --delete-branch
-SHA="$(git rev-parse main)"
+git fetch origin main
+SHA="$(git ls-remote origin main | awk '{print $1}')"
 bd update "$ID" --remove-label "gate:pr"
 bd close "$ID" --reason "Merged in $SHA"
-git worktree remove "../wt-$ID"
+
+# Sync local main. Stash any .beads/issues.jsonl drift from the bd
+# updates above so the fast-forward doesn't refuse.
+git stash push -m "wip bd state" .beads/issues.jsonl 2>/dev/null || true
+git pull --ff-only
+git stash drop 2>/dev/null || true
+bd export -o .beads/issues.jsonl --no-memories
 ```
 
 ## Failure / escalation
@@ -105,3 +129,8 @@ Quick reference:
    prior step failed BEFORE the action completed — bd state is the
    authority for what's "done." Once an action has succeeded end-to-end,
    subsequent runs will error rather than corrupt state.
+4. **Do not use `gh pr merge --auto`** for chore PRs you open outside
+   the orchestrator pipeline. Auto-merge fires whenever the PR becomes
+   mergeable in GitHub's eyes, regardless of CI conclusion (no GH
+   required checks per ADR 0005 — see ucs-0z5). Run the same
+   `statusCheckRollup` preflight as Action 3 before `gh pr merge`.
