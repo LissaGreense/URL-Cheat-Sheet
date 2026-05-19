@@ -12,6 +12,13 @@
    `bash scripts/setup-git-hooks.sh` to wire the version-controlled
    pre-push hook that blocks direct pushes to `main`. Verify with
    `git config core.hooksPath` (should print `scripts/git-hooks`).
+5. **For tasks that call a real model** (live QA on the chat UI, eval
+   suites under `packages/evals/`, anything hitting `/api/chat` with an
+   actual response): the project expects `ANTHROPIC_API_KEY` to be set
+   in a local `.env` at the repo root. **Do not create, modify, or
+   populate `.env`** — it's user-managed. If a key is needed and `.env`
+   is absent or empty, stop and ask the user to fill it in. That's a
+   valid stop point, not a workflow gap to engineer around.
 
 ## Hard rules
 
