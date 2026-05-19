@@ -54,6 +54,9 @@
         "linkedom": "0.18.12",
         "zod": "^4.4.3",
       },
+      "devDependencies": {
+        "@types/node": "^24.0.0",
+      },
     },
     "packages/evals": {
       "name": "@url-cheat-sheet/evals",

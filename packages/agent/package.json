@@ -22,5 +22,8 @@
     "linkedom": "0.18.12",
     "@andersmyrmel/vard": "1.2.0",
     "ipaddr.js": "2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0"
   }
 }
