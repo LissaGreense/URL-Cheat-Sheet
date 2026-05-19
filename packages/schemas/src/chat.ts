@@ -20,7 +20,10 @@ export const chatRequestSchema = z.object({
       parts: z.array(z.unknown())
     })
   ),
-  document: documentSchema
+  // Optional in Task 1; tightened to required in Task 8 (ucs-8ad) once
+  // the chat route + tests are updated to thread the document through.
+  // Staged delivery — keeps each task atomic and CI green at every merge.
+  document: documentSchema.optional()
 });
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
