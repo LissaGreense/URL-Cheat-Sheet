@@ -109,11 +109,18 @@ bd update "$ID" --remove-label "gate:pr"
 bd close "$ID" --reason "Merged in $SHA"
 
 # Sync local main. Stash any .beads/issues.jsonl drift from the bd
-# updates above so the fast-forward doesn't refuse.
+# updates above so the fast-forward doesn't refuse; drop the stash so
+# the working tree matches origin/main exactly.
+#
+# We intentionally do NOT re-export .beads/issues.jsonl here. bd's Dolt
+# DB carries the post-close state; the jsonl snapshot trails by one
+# cycle and catches up in the next PR's bd auto-commits. Re-exporting
+# would leave the working tree dirty on main after every merge, and
+# that drift then leaked into every subsequent worktree's bootstrap
+# commit. See ADR 0007.
 git stash push -m "wip bd state" .beads/issues.jsonl 2>/dev/null || true
 git pull --ff-only
 git stash drop 2>/dev/null || true
-bd export -o .beads/issues.jsonl --no-memories
 ```
 
 ## Failure / escalation
