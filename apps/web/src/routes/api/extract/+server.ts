@@ -5,7 +5,7 @@ import {
   type ExtractError,
   type ExtractResponse
 } from '@url-cheat-sheet/schemas';
-import { safeFetch, extractContent, vardScanner } from '@url-cheat-sheet/agent';
+import { safeFetch, extractContent, vardScanner, type FetchFailure } from '@url-cheat-sheet/agent';
 
 /**
  * Map an `ExtractError['kind']` to the appropriate HTTP status code.
@@ -37,6 +37,29 @@ function errorBody(kind: ExtractError['kind'], message: string): ExtractError {
 }
 
 /**
+ * Build a human-meaningful message from a `safeFetch` failure. Each variant
+ * carries different context, so the message is shaped per kind rather than
+ * defaulting to the kind string (which makes the failure invisible to the
+ * client; see ucs-u47).
+ */
+function fetchErrorMessage(error: FetchFailure['error']): string {
+  switch (error.kind) {
+    case 'FETCH_TIMEOUT':
+      return 'request timed out';
+    case 'FETCH_TOO_LARGE':
+      return `response exceeded ${error.sizeBytes} bytes`;
+    case 'FETCH_BLOCKED_URL':
+      return `URL blocked: ${error.reason}`;
+    case 'FETCH_UNSUPPORTED_CONTENT_TYPE':
+      return `unsupported content type: ${error.contentType}`;
+    case 'FETCH_HTTP_ERROR':
+      return `HTTP ${error.status} from origin`;
+    case 'FETCH_NETWORK':
+      return error.message;
+  }
+}
+
+/**
  * POST /api/extract — pipes a URL through the URL fetcher pipeline:
  * `safeFetch` (SSRF + size + content-type guards) → `extractContent`
  * (Readability) → `vardScanner` (prompt-injection scan). Returns a
@@ -58,7 +81,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const fetchResult = await safeFetch(parsed.data.url);
   if (!fetchResult.ok) {
-    return json(errorBody(fetchResult.error.kind, fetchResult.error.kind), {
+    return json(errorBody(fetchResult.error.kind, fetchErrorMessage(fetchResult.error)), {
       status: errorStatus(fetchResult.error.kind)
     });
   }

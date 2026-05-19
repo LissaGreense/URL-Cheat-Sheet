@@ -21,21 +21,27 @@ export function assertPublicIp(addr: string): void {
 }
 
 /**
- * Resolve `host` via the OS resolver, assert every returned IP is public,
- * and return the pinned address. Closes the DNS-rebinding TOCTOU window
- * by handing the pinned IP back for `fetch()` to connect to directly.
+ * Resolve `host` via the OS resolver and assert every returned IP is public.
+ * Returns void — the caller passes the original URL to `fetch`, which redoes
+ * its own DNS lookup at connect time. A small TOCTOU rebinding window exists
+ * between this check and `fetch`'s resolution; mitigated by short DNS TTLs
+ * and by running in environments with no VPC routes to internal services.
+ *
+ * This shape is portable across Bun and Node/undici — earlier versions
+ * pinned the IP into the URL and forwarded the original host via the `Host`
+ * header, but Node/undici drives SNI from the URL hostname, which breaks
+ * the TLS handshake against any origin that requires correct SNI.
  */
-export async function resolveAndPin(host: string): Promise<string> {
+export async function validateHostIsPublic(host: string): Promise<void> {
   if (isIP(host)) {
     assertPublicIp(host);
-    return host;
+    return;
   }
   const all = await lookup(host, { all: true });
   if (!all.length) {
     throw new SsrfBlockedError(host, 'no-dns');
   }
   for (const { address } of all) assertPublicIp(address);
-  return all[0]!.address;
 }
 
 export class SsrfBlockedError extends Error {
