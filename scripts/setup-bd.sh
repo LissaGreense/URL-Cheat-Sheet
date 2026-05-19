@@ -25,6 +25,11 @@ cd "$REPO_ROOT"
 EXPECTED="proposed:active,in_review:wip"
 CURRENT="$(bd config get status.custom 2>/dev/null | tail -1 | awk -F'= ' '{print $2}')"
 
+# `bd config set status.custom` is a wholesale overwrite, not a merge — so
+# re-running this script in a clone that still has the legacy 4-status set
+# (`proposed,enriched,ready,in_review`) shrinks it to the new 2-status set
+# in one shot. No data migration is needed in this repo: at the time of
+# ADR 0006, zero issues were parked in `enriched`/`ready`.
 if [ "$CURRENT" = "$EXPECTED" ]; then
   echo "✓ bd custom statuses already provisioned"
 else

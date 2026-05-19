@@ -19,8 +19,8 @@ bd statuses, provisioned by `scripts/setup-bd.sh`:
 | `in_review` | wip        | PR open, gates clearing                          |
 
 In the URL-fetcher run on 2026-05-19 the orchestrator entrypoint
-(`/claim-next`) returned `[]` despite ten enriched issues being parked
-at `enriched`/`ready`. The root cause is structural, not configuration:
+(`/claim-next`) returned `[]` despite the run's enriched issues being
+parked at `enriched`/`ready`. The root cause is structural, not configuration:
 
 1. `bd ready` (the built-in query) filters to **built-in active statuses
    only** — i.e. `open`. Custom active statuses are invisible to it.
