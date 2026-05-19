@@ -34,10 +34,12 @@ For each `proposed` issue (use `bd list --status proposed --json`):
    - Agent/prompt/tool change → `gate:evals` — only if an eval suite
      exists at `packages/evals/suites/<name>/` *or* a depended-on task
      scaffolds it before this one merges. If the task itself is the
-     scaffold, do **not** apply `gate:evals` to it (can't gate the
-     scaffold on the very thing it scaffolds). If agent code changes
-     ahead of any eval coverage, omit `gate:evals` and file a follow-up
-     bd issue, then reference it in the notes.
+     scaffold, do **not** apply `gate:evals` to it — a scaffold task
+     can't be gated on the artifact it creates. (Concretely: the task
+     that adds `packages/evals/suites/foo/` doesn't get `gate:evals`;
+     the first downstream task that exercises foo's prompts does.) If
+     agent code changes ahead of any eval coverage, omit `gate:evals`
+     and file a follow-up bd issue, then reference it in the notes.
    - All non-trivial code → `gate:review`. Always exercisable — a
      reviewer is a person/agent, not an artifact.
 4. **Write enriched body**, replacing the original:
