@@ -1,12 +1,7 @@
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from 'promptfoo';
 import { extractContent, safeFetch, streamChat } from '@url-cheat-sheet/agent';
 import type { Document } from '@url-cheat-sheet/schemas';
-import {
-  readUIMessageStream,
-  uiMessageChunkSchema,
-  type UIMessage,
-  type UIMessageChunk
-} from 'ai';
+import { readUIMessageStream, uiMessageChunkSchema, type UIMessage, type UIMessageChunk } from 'ai';
 import { parseJsonEventStream, type ParseResult } from '@ai-sdk/provider-utils';
 
 const DEFAULT_PROVIDER_ID = 'url-cheat-sheet:agent';
@@ -124,7 +119,6 @@ async function drainAssistantText(response: Response): Promise<string> {
     .map((p) => p.text)
     .join('');
 }
-
 
 type FetchFailureError = Extract<Awaited<ReturnType<typeof safeFetch>>, { ok: false }>['error'];
 
