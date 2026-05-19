@@ -91,9 +91,34 @@ ID="$1"
 PR_URL="$(bd show "$ID" --json | jq -r '.[0].notes' | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)"
 
 # Preflight: every condition must hold or we abort.
-ROLLUP="$(gh pr view "$PR_URL" --json statusCheckRollup -q '.statusCheckRollup[] | .conclusion')"
+#
+# CheckRuns have separate `status` (lifecycle: COMPLETED / IN_PROGRESS /
+# QUEUED / ...) and `conclusion` (verdict: SUCCESS / FAILURE / SKIPPED /
+# ...). The conclusion is the empty string while the check is still
+# running, so we must branch on `status == COMPLETED` first — otherwise
+# an in-flight check (e.g. a freshly-retriggered eval-gate after a label
+# change) reads as `conclusion=""`, which the conclusion check would
+# treat as "not SUCCESS" and abort spuriously. Three states:
+#   1. No checks reported  → abort (PR isn't wired to CI yet).
+#   2. Any check in flight → abort with "wait for CI" — re-run when done.
+#   3. Any check failed    → abort with the specific failing checks.
+ROLLUP="$(gh pr view "$PR_URL" --json statusCheckRollup \
+  -q '.statusCheckRollup[] | "\(.status)\t\(.conclusion)\t\(.name)"')"
 [ -z "$ROLLUP" ] && { echo "abort: no CI checks reported on $PR_URL"; exit 1; }
-echo "$ROLLUP" | grep -qvE '^(SUCCESS|SKIPPED)$' && { echo "abort: CI not green"; exit 1; }
+
+INFLIGHT="$(echo "$ROLLUP" | awk -F'\t' '$1 != "COMPLETED" { print "  " $3 ": " $1 }')"
+if [ -n "$INFLIGHT" ]; then
+  echo "abort: CI in flight — re-run pr-merge when checks complete:"
+  echo "$INFLIGHT"
+  exit 1
+fi
+
+FAILED="$(echo "$ROLLUP" | awk -F'\t' '$1 == "COMPLETED" && $2 != "SUCCESS" && $2 != "SKIPPED" { print "  " $3 ": " $2 }')"
+if [ -n "$FAILED" ]; then
+  echo "abort: CI not green:"
+  echo "$FAILED"
+  exit 1
+fi
 
 REMAINING_GATES="$(bd show "$ID" --json | jq -r '.[0].labels[]? | select(test("^gate:"))' | grep -v '^gate:pr$' || true)"
 [ -n "$REMAINING_GATES" ] && { echo "abort: bd gates still open: $REMAINING_GATES"; exit 1; }
