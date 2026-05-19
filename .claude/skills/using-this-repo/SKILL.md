@@ -72,13 +72,16 @@ and burns reviewer cycles.
 For each task, write:
 
 - **Function/method signatures** (types, return shape) — these are what
-  the schemas-team / impl-team need to coordinate on.
+  the team owning the schemas (`.claude/teams/schemas-team.md`) and the
+  team owning the implementation surface coordinate on.
 - **Acceptance criteria** — what the function does, edge cases it handles.
 - **Affected files** — paths and create/modify/delete intent.
-- **Library calls** — name the library + method, but **don't paste a
-  call site verbatim** unless you've just run it. Library APIs drift;
-  the impl agent should grep the installed `.d.ts` rather than copy from
-  a plan written before the dep was upgraded.
+- **Library calls — name the library + method, but DO NOT paste a call
+  site verbatim unless you've just run it.** Library APIs drift; the
+  impl agent should grep the installed `.d.ts` rather than copy from a
+  plan written before the dep was upgraded. *This is the sharpest of
+  the four bullets — three of the four ucs-mmj incidents traced to
+  exactly this drift.*
 
 Skip:
 
