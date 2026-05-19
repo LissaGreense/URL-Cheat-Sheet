@@ -38,7 +38,10 @@ absorbed:
     `convertToCoreMessages` adapter mutates the array; the cast is
     documented type-narrowing, not legacy noise.
   - **`ANTHROPIC_API_KEY` check is load-bearing** — never remove it
-    from `/api/chat`. Missing key must 503 with a clear message, not
-    leak as an unhandled SDK error.
+    from `/api/chat`. Missing key returns a 500 with a clear
+    "ANTHROPIC_API_KEY missing" message (see
+    `apps/web/src/routes/api/chat/+server.ts`), not an unhandled SDK
+    error. (Semantically 503 would be more correct; if you change
+    the status code, file a separate bd issue and update consumers.)
 - The current `packages/evals/suites/` shape (if `gate:evals` is on the
   issue) — grep for the existing harness pattern, don't invent one.

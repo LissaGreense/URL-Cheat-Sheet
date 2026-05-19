@@ -13,8 +13,8 @@ description: Orchestrator entrypoint. Picks the top-priority ready bd issue, cre
    section** (from `.claude/teams/<name>.md`) verbatim in the dispatch prompt so
    the subagent doesn't have to re-discover Zod 4 idioms, the SSRF footgun,
    `chatRequestSchema`-stays-`z.object`, and other CLAUDE.md-derived
-   constraints. Skip this for teams without a Must-read section
-   (gate/review/qa/evals teams don't author code).
+   constraints. Gate-style teams (review/qa/evals) have no constraints
+   section — skip the inline.
 6. After the team reports success, run gates declared on the issue (`gate:review`, `gate:qa`, `gate:evals`).
 7. On all gates green, transition the issue to `closed`, merge the branch, remove the worktree.
 8. Report the final status to the user.
