@@ -61,4 +61,17 @@ describe('POST /api/chat', () => {
     expect(streamChatMock).toHaveBeenCalledOnce();
     expect(streamChatMock.mock.calls[0]?.[0]).toEqual(body.messages);
   });
+
+  it('accepts the @ai-sdk/svelte Chat client payload (id + trigger extras)', async () => {
+    streamChatMock.mockResolvedValue(new Response('stream-body', { status: 200 }));
+    const POST = await importPost();
+    const body = {
+      id: 'chat-session-123',
+      trigger: 'submit-message',
+      messages: [{ id: '1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]
+    };
+    const res = await POST({ request: makeRequest(body) } as never);
+    expect(res.status).toBe(200);
+    expect(streamChatMock).toHaveBeenCalledOnce();
+  });
 });
