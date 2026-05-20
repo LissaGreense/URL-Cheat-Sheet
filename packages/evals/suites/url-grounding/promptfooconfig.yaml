@@ -67,3 +67,16 @@ tests:
     assert:
       - type: contains
         value: 'does not'
+  # ucs-8nl: exercises the pipe-alternation grep form. A natural answer
+  # requires bundling status-code synonyms ("status|code|418|response|
+  # error") into one grep call; the prior `string | string[]` schema
+  # interpreted pipe-joined strings as a single literal and returned zero
+  # hits, forcing fabrication or refusal. After the schema change the
+  # model can land the answer in 1-2 grep calls.
+  - description: HTCPCP error/status codes (exercises pipe-alternation grep)
+    vars:
+      kb_url: https://www.rfc-editor.org/rfc/rfc2324.html
+      question: Which HTTP status codes does HTCPCP define for protocol errors?
+    assert:
+      - type: contains
+        value: '418'
