@@ -30,22 +30,6 @@ bun run dev                       # SvelteKit on http://localhost:5173
 bun run typecheck && bun run lint && bun run test && bun run build
 ```
 
-## Merging a chore PR safely
-
-`gh pr merge --auto` is unsafe in this repo: GitHub branch protection
-isn't available on the free-tier private plan (see ADR 0005), so
-auto-merge fires whenever the PR becomes mergeable in GitHub's eyes
-regardless of CI conclusion. Use the wrapper instead:
-
-```bash
-bash scripts/safe-merge.sh <pr-number>            # refuses if any check is not SUCCESS/SKIPPED
-bash scripts/safe-merge.sh <pr-number> --wait     # polls until CI completes, then merges
-```
-
-The orchestrator's `pr-merge` action already does this check for
-feature PRs; the script is for chore PRs that don't go through the
-orchestrator.
-
 ## Layout
 
 - `apps/web/` — SvelteKit app (Vercel target). Chat UI at `/`, agent endpoint at `/api/chat`.
@@ -54,7 +38,7 @@ orchestrator.
 - `packages/evals/` — promptfoo runner + suites. Canary suite under `suites/canary/`.
 - `packages/qa/` — reserved for QA test infra (skeleton).
 - `docs/` — specs, plans, reviews, QA, evals, ADRs (see [`docs/README.md`](docs/README.md)).
-- `scripts/` — one-shot setup (`setup-git-hooks.sh`, `setup-bd.sh`) and the chore-PR safe-merge wrapper.
+- `scripts/` — one-shot setup (`setup-git-hooks.sh`, `setup-bd.sh`) plus orchestrator helpers (`render-pr-body.sh`, `bd-pr-audit.sh`, `session-prime.sh`).
 - `.claude/` — vendored superpowers, project skills, team specs.
 - `.beads/` — task DB (bd v1.x: worktree-safe by default, no flags needed).
 

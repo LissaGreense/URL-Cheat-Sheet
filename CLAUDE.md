@@ -39,10 +39,12 @@
 - **Never push to `main` directly.** All changes land via PR. The
   orchestrator opens the PR at worktree creation (see
   `opening-pr-orchestrator` skill) and merges after CI green + all
-  `gate:*` labels cleared. Local pre-push hook
-  (`scripts/git-hooks/pre-push`, wired via `setup-git-hooks.sh`)
-  enforces this mechanically; see ADR 0005 for why a local hook
-  rather than GitHub branch protection.
+  `gate:*` labels cleared. Enforcement is server-side: GitHub branch
+  protection on `main` blocks direct pushes and gates merges on
+  required CI checks (`typecheck`/`lint`/`test`/`build`). The local
+  pre-push hook (`scripts/git-hooks/pre-push`, wired via
+  `setup-git-hooks.sh`) is defense-in-depth — faster feedback before
+  the round-trip. See ADR 0005 for the history.
 - QA team never fixes defects — files them only.
 
 ## Workflow stages → skills (canonical)
@@ -71,7 +73,9 @@ an ADR.
 - Premature abstractions before the third use.
 - Speculative generality / "just in case" code.
 - Passing `--no-daemon` to `bd` (the flag was removed upstream; it errors).
-- `git push origin main` (or any direct write to `main`). The local
-  pre-push hook blocks it; if it slips through (`--no-verify`, or
-  hook not yet wired), treat it as a near-miss incident and file
+- `git push origin main` (or any direct write to `main`). GitHub
+  branch protection rejects it server-side; the local pre-push hook
+  blocks it before the push attempt. If a push to `main` somehow
+  succeeds (`--no-verify` against an unconfigured hook AND a server
+  misconfig), treat it as a near-miss incident and file
   `bd create --type=bug --priority=0 --label=incident`.
