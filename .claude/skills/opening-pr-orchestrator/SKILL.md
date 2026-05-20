@@ -81,10 +81,12 @@ Starts inside the worktree, then transitions to the main repo root so
 the worktree can be removed (git refuses to remove the worktree you're
 standing in, and refuses to delete a branch held by a worktree).
 
-This repo intentionally does NOT configure GitHub branch protection
-required checks (see ADR 0005), so `gh pr checks --required` is always
-empty here. The preflight reads `statusCheckRollup` directly and
-treats `SKIPPED` as acceptable (e.g. `eval-gate` skips on non-agent PRs).
+Branch protection (see ADR 0005, applied once the repo went public)
+requires the four core checks: `typecheck`, `lint`, `test`, `build`.
+The preflight reads `statusCheckRollup` directly rather than relying on
+`gh pr checks --required`, and treats `SKIPPED` as acceptable so any
+conditional or path-filtered jobs don't block merges. Evals run
+locally only (see ADR 0008), so the rollup contains no eval check.
 
 **Concurrency:** when more than one orchestrator may be active, the
 action acquires `bd merge-slot` before the preflight so two pipelines
@@ -122,8 +124,8 @@ trap 'bd merge-slot release >/dev/null 2>&1 || true' EXIT
 # QUEUED / ...) and `conclusion` (verdict: SUCCESS / FAILURE / SKIPPED /
 # ...). The conclusion is the empty string while the check is still
 # running, so we must branch on `status == COMPLETED` first — otherwise
-# an in-flight check (e.g. a freshly-retriggered eval-gate after a label
-# change) reads as `conclusion=""`, which the conclusion check would
+# an in-flight check (e.g. a freshly-retriggered job after a re-run)
+# reads as `conclusion=""`, which the conclusion check would
 # treat as "not SUCCESS" and abort spuriously. Three states:
 #   1. No checks reported  → abort (PR isn't wired to CI yet).
 #   2. Any check in flight → abort with "wait for CI" — re-run when done.
