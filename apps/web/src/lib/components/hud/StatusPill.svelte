@@ -21,6 +21,8 @@
    *   - `alarm`  → `--amber-alarm` (rationed warm; error states only)
    *   - `dim`    → `--bone-dim` (secondary, e.g. idle `[ STANDBY ]`)
    */
+  import { scrambleIn } from '../../motion/scrambleIn';
+
   type Props = {
     state: string;
     tone?: 'normal' | 'alarm' | 'dim';
@@ -34,7 +36,7 @@
   class:status-pill--alarm={tone === 'alarm'}
   class:status-pill--dim={tone === 'dim'}
 >
-  [ {state} ]
+  [ <span use:scrambleIn>{state}</span> ]
 </span>
 
 <style>
