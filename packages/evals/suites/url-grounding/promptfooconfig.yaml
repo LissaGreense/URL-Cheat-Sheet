@@ -39,3 +39,27 @@ tests:
     assert:
       - type: contains
         value: '2324'
+  - description: 'trap: HTCPCP does not specify encryption (must refuse, not fabricate)'
+    vars:
+      kb_url: https://www.rfc-editor.org/rfc/rfc2324.html
+      question: What encryption algorithms does HTCPCP use?
+    assert:
+      - type: contains
+        value: 'does not'
+      - type: not-contains
+        value: 'AES'
+      - type: not-contains
+        value: 'ChaCha20'
+  - description: 'trap: RFC 7168 does not specify Japanese tea varieties (must refuse, not fabricate)'
+    vars:
+      kb_url: https://www.rfc-editor.org/rfc/rfc7168.html
+      question: What Japanese tea varieties does this protocol define?
+    assert:
+      - type: contains
+        value: 'does not'
+      - type: not-contains
+        value: 'matcha'
+      - type: not-contains
+        value: 'sencha'
+      - type: not-contains
+        value: 'hojicha'
