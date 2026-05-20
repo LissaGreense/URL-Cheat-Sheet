@@ -95,4 +95,45 @@ describe('GrepDocScan', () => {
     });
     expect(container.querySelector('.grep-doc__backdrop')).not.toBeNull();
   });
+
+  it('renders a .scan-sweep__line child so the scanSweep action can target it', () => {
+    const { container } = render(GrepDocScan, {
+      props: { query: 'tea', state: 'scanning' }
+    });
+    expect(container.querySelector('.scan-sweep__line')).not.toBeNull();
+  });
+
+  it('dims the backdrop (--dim modifier class) when state="done"', () => {
+    const { container } = render(GrepDocScan, {
+      props: { query: 'tea', state: 'done', hits: 1 }
+    });
+    const backdrop = container.querySelector('.grep-doc__backdrop');
+    expect(backdrop?.classList.contains('grep-doc__backdrop--dim')).toBe(true);
+  });
+
+  it('dims the backdrop (--dim modifier class) when state="no-hits"', () => {
+    const { container } = render(GrepDocScan, {
+      props: { query: 'tea', state: 'no-hits' }
+    });
+    const backdrop = container.querySelector('.grep-doc__backdrop');
+    expect(backdrop?.classList.contains('grep-doc__backdrop--dim')).toBe(true);
+  });
+
+  it('does NOT dim the backdrop while state="scanning"', () => {
+    const { container } = render(GrepDocScan, {
+      props: { query: 'tea', state: 'scanning' }
+    });
+    const backdrop = container.querySelector('.grep-doc__backdrop');
+    expect(backdrop?.classList.contains('grep-doc__backdrop--dim')).toBe(false);
+  });
+
+  it('tags the scanline with data-state for failure / cancellation visuals', () => {
+    // Spec §5.3 — faulted dims the bar to 30%; the CSS hangs off the
+    // attribute selector, so we just assert the attribute is wired.
+    const { container } = render(GrepDocScan, {
+      props: { query: 'tea', state: 'faulted' }
+    });
+    const line = container.querySelector('.scan-sweep__line');
+    expect(line?.getAttribute('data-state')).toBe('faulted');
+  });
 });
