@@ -82,12 +82,15 @@
   import { Chat } from '@ai-sdk/svelte';
   import { DefaultChatTransport } from 'ai';
   import { page } from '$app/state';
+  import { tick } from 'svelte';
   import type { ExtractError } from '@url-cheat-sheet/schemas';
   import IdleState from '../lib/components/states/IdleState.svelte';
   import ExtractingState from '../lib/components/states/ExtractingState.svelte';
   import ExtractErrorState from '../lib/components/states/ExtractErrorState.svelte';
   import FlaggedState from '../lib/components/states/FlaggedState.svelte';
   import ReadyState from '../lib/components/states/ReadyState.svelte';
+  import SettingsDrawer from '$lib/components/SettingsDrawer.svelte';
+  import { classifyChatError, INLINE_ERROR_COPY } from '$lib/chat-error';
 
   // Renamed from `state` to `pageState` to dodge a svelte-check
   // resolution quirk: when the reactive variable is literally named
@@ -100,6 +103,45 @@
   let pageState = $state<State>({ kind: 'idle' });
   let urlInput = $state('');
   let chatInput = $state('');
+
+  /**
+   * The user's BYO Anthropic API key. Lives in memory only — never
+   * persisted to `localStorage`, `sessionStorage`, IndexedDB, or any
+   * other store (spec § Browser-side storage). The `pageshow` listener
+   * below also nulls this on bfcache restoration.
+   */
+  let apiKey = $state<string | null>(null);
+
+  /**
+   * Whether the settings drawer is currently open. A `$effect` below
+   * pops this to `true` when the chat returns a key-rejected /
+   * key-malformed error so the user is forced back into the entry
+   * flow without an explicit click.
+   */
+  let drawerOpen = $state(false);
+
+  /**
+   * Inline error string surfaced above the composer in ReadyState
+   * for the 429 (rate-limit) and 502/generic buckets. The 401/400
+   * buckets do NOT use this surface — they reopen the drawer
+   * instead.
+   *
+   * Tracked separately from `chat.error` because we want to keep the
+   * banner visible after `chat.error` clears (e.g., a subsequent
+   * successful turn would otherwise vanish the user's only signal
+   * that the previous turn failed). Cleared on the next successful
+   * send via the existing `sendChat` handler.
+   */
+  let composerInlineError = $state<string | null>(null);
+
+  /**
+   * Tracks which `chat.error` reference we've already routed. The
+   * `Chat` client mutates `error` in place — the message string
+   * itself is the cheapest stable identity to compare across renders.
+   * Without this guard the routing `$effect` would fire on every
+   * unrelated re-render while `chat.error` is still set.
+   */
+  let lastRoutedErrorMessage: string | undefined = undefined;
 
   /**
    * Dev-mode-only synthetic state derived from the URL's `?state=<kind>`
@@ -121,11 +163,20 @@
 
   let document = $derived(renderState.kind === 'ready' ? renderState.document : null);
 
+  /**
+   * The `prepareSendMessagesRequest` closure runs at send-time, not at
+   * Chat construction time, so reading `apiKey` / `document` here
+   * captures their current rune values lazily. This is what the spec
+   * means by "the key exists in two memory locations during one chat
+   * turn: a Svelte `$state` rune in the browser tab, and a local
+   * `const` in one Vercel function invocation" (spec § Architecture)
+   * — the rune is read once per send, passed to fetch, then released.
+   */
   const chat = new Chat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
       prepareSendMessagesRequest: ({ messages }) => ({
-        body: { messages, document }
+        body: { messages, document, apiKey }
       })
     })
   });
@@ -198,10 +249,83 @@
   function sendChat(e: SubmitEvent) {
     e.preventDefault();
     const text = chatInput.trim();
-    if (!text || pageState.kind !== 'ready') return;
+    if (!text || pageState.kind !== 'ready' || apiKey === null) return;
+    // Optimistically clear the inline error — the next chat.error
+    // mutation (if any) will rehydrate it via the routing effect.
+    composerInlineError = null;
     chat.sendMessage({ text });
     chatInput = '';
   }
+
+  /**
+   * bfcache guard (spec § Browser-side storage). When the browser
+   * restores this page from its back/forward cache, `event.persisted`
+   * is `true` — and the in-memory `apiKey` rune would still hold the
+   * pre-navigation value. Nulling it forces the user to re-enter the
+   * key, matching the "in-memory only, does not survive tab close
+   * /restore" invariant.
+   *
+   * Lives inside `$effect`, which only runs on the client — `window`
+   * is never accessed during SSR.
+   */
+  $effect(() => {
+    function onPageShow(event: PageTransitionEvent) {
+      if (event.persisted === true) {
+        apiKey = null;
+      }
+    }
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  });
+
+  /**
+   * Client-side error routing (spec § Error taxonomy, plan Task 5).
+   * The `@ai-sdk/svelte` `Chat` client exposes `error: Error | undefined`
+   * but not the HTTP status code — we substring-match the message
+   * against the four Task 3 (ucs-qdp) contract strings to decide
+   * which branch the page should follow.
+   *
+   * Branches:
+   *   - 'key-rejected' / 'key-malformed' → reopen the drawer, null
+   *     the apiKey rune, focus the key input on the next tick.
+   *   - 'rate-limit' → inline message above composer; keep the key.
+   *   - 'generic'    → inline message above composer; keep the key.
+   *
+   * The `lastRoutedErrorMessage` cursor prevents re-routing the same
+   * error on every re-render — we only act when the message changes.
+   */
+  $effect(() => {
+    const message = chat.error?.message;
+    if (message === undefined) {
+      // Error cleared (e.g., new turn started); reset the cursor so a
+      // subsequent identical-string error can route again.
+      lastRoutedErrorMessage = undefined;
+      return;
+    }
+    if (message === lastRoutedErrorMessage) return;
+    lastRoutedErrorMessage = message;
+
+    const kind = classifyChatError(message);
+    if (kind === 'key-rejected' || kind === 'key-malformed') {
+      // Force re-entry: clear the inline surface (the drawer carries
+      // the rejection copy itself), null the key, pop the drawer.
+      composerInlineError = null;
+      apiKey = null;
+      drawerOpen = true;
+      // Focus the key input once the drawer's entry view paints. The
+      // drawer always renders its input with `id="byo-key-input"`
+      // (see SettingsDrawer.svelte), so a direct getElementById is
+      // the minimal coupling needed without modifying the drawer.
+      // Use `window.document` because the local `document` rune above
+      // shadows the global identifier inside this script.
+      void tick().then(() => {
+        const input = window.document.getElementById('byo-key-input') as HTMLInputElement | null;
+        input?.focus();
+      });
+    } else {
+      composerInlineError = INLINE_ERROR_COPY[kind];
+    }
+  });
 
   function humanizeError(err: ExtractError): string {
     switch (err.kind) {
@@ -225,6 +349,49 @@
   }
 </script>
 
+<!--
+  Page-level settings gear. Lives on every state (idle, extracting,
+  ready, etc.) so the user can paste their key before they ingest a
+  URL, or revisit settings mid-session. Fixed top-right so it does not
+  fight with the cinematic state-component layouts. The settings drawer
+  itself hangs off the same surface — collapsed by default; the gear
+  toggles it open.
+-->
+<button
+  type="button"
+  class="settings-gear"
+  data-testid="settings-gear"
+  aria-label="Settings"
+  aria-expanded={drawerOpen}
+  aria-controls="settings-drawer-panel"
+  onclick={() => (drawerOpen = !drawerOpen)}
+>
+  <span aria-hidden="true">⚙</span>
+</button>
+
+{#if drawerOpen}
+  <aside
+    id="settings-drawer-panel"
+    class="settings-drawer-panel"
+    data-testid="settings-drawer-panel"
+    aria-label="Settings"
+  >
+    <div class="settings-drawer-panel__header">
+      <h2 class="settings-drawer-panel__title">SETTINGS</h2>
+      <button
+        type="button"
+        class="settings-drawer-panel__close"
+        data-testid="settings-drawer-close"
+        aria-label="Close settings"
+        onclick={() => (drawerOpen = false)}
+      >
+        ×
+      </button>
+    </div>
+    <SettingsDrawer bind:apiKey />
+  </aside>
+{/if}
+
 {#if renderState.kind === 'idle'}
   <IdleState bind:urlInput onSubmit={loadUrl} />
 {:else if renderState.kind === 'extracting'}
@@ -242,7 +409,82 @@
     document={renderState.document}
     {chat}
     bind:chatInput
+    keySet={apiKey !== null}
+    inlineError={composerInlineError}
     onSendChat={sendChat}
     onReset={reset}
   />
 {/if}
+
+<style>
+  /*
+    Settings gear — fixed top-right surface, mirrors the top-left
+    sys-voice header anchors in the state components. Keeps the gear
+    above all state-component chrome via z-index.
+  */
+  .settings-gear {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 2;
+    background: transparent;
+    border: 0.5px solid var(--hair);
+    color: var(--bone-dim);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0.5rem 0.625rem;
+    cursor: pointer;
+  }
+  .settings-gear:hover {
+    color: var(--bone);
+    border-color: var(--bone-dim);
+  }
+
+  /*
+    Settings drawer panel — slides over from the right. Phase 1 ships
+    static; motion is Phase 2. Sized to comfortably accommodate the
+    SettingsDrawer's input row + threat-model paragraph.
+  */
+  .settings-drawer-panel {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 3;
+    width: min(22rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    padding: 1rem;
+    background: var(--ink);
+    border: 0.5px solid var(--hair);
+    color: var(--bone);
+  }
+
+  .settings-drawer-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+
+  .settings-drawer-panel__title {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    letter-spacing: 0.16em;
+    color: var(--bone-dim);
+    margin: 0;
+  }
+
+  .settings-drawer-panel__close {
+    background: transparent;
+    border: none;
+    color: var(--bone-dim);
+    font-size: 1.25rem;
+    line-height: 1;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+  }
+  .settings-drawer-panel__close:hover {
+    color: var(--bone);
+  }
+</style>

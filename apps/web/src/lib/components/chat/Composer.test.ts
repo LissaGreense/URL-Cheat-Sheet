@@ -97,6 +97,22 @@ describe('Composer', () => {
     expect(submit.disabled).toBe(false);
   });
 
+  it('uses the placeholder override when provided', () => {
+    // ucs-88j: the BYO-key flow swaps the placeholder when no API key
+    // is set so the disabled state communicates *why* the user can't
+    // type.
+    const { container } = render(ComposerHost, {
+      props: {
+        value: '',
+        disabled: true,
+        placeholder: 'Add your Anthropic API key in settings to start chatting',
+        onSubmit: () => {}
+      }
+    });
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input.placeholder).toBe('Add your Anthropic API key in settings to start chatting');
+  });
+
   it('renders the SEND sys-voice action label', () => {
     const { container } = render(ComposerHost, {
       props: { value: 'tea', onSubmit: () => {} }
