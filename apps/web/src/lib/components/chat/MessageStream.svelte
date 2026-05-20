@@ -194,6 +194,32 @@
     const truncated = o['truncated'];
     return { text, truncated: truncated === true };
   }
+
+  /**
+   * Stable identity key for a message part. Tool parts get a guaranteed-
+   * unique `toolCallId` from the AI SDK (one per tool invocation), so we
+   * key by that whenever it's present. Non-tool parts (text, reasoning,
+   * step-start) fall back to a composite of `message.id`, the index, and
+   * `part.type` — the composite still produces stable keys across SSE
+   * chunks because text parts are typically singletons within a message
+   * and the index is the same across rerenders within a streaming turn.
+   *
+   * Why this matters (ucs-6j9 / hypothesis 3): the previous keying used
+   * the bare loop index `(i)`. When the AI SDK appends new tool parts
+   * mid-stream, Svelte's index-keyed each block reuses DOM nodes from
+   * earlier mounts for later parts whose identity has changed. Actions
+   * attached to those nodes (`scrambleIn`, `phosphorFlash`) see a same-
+   * node-different-consumer transition that doesn't match their
+   * lifecycle assumptions, so the visible pill text freezes at the
+   * previous part's resting state. Keying by `toolCallId` gives Svelte a
+   * stable identity to mount/dispose against, restoring the
+   * one-action-per-logical-part contract.
+   */
+  function partKey(messageId: string, part: { type: string }, i: number): string {
+    const toolCallId = (part as Record<string, unknown>)['toolCallId'];
+    if (typeof toolCallId === 'string' && toolCallId.length > 0) return toolCallId;
+    return `${messageId}:${i}:${part.type}`;
+  }
 </script>
 
 <ol class="message-stream">
@@ -206,7 +232,7 @@
       {#if message.role === 'user'}
         <div class="message-stream__user">
           <span class="message-stream__user-prefix" aria-hidden="true">&gt;</span>
-          {#each message.parts as part, i (i)}
+          {#each message.parts as part, i (partKey(message.id, part, i))}
             {#if part.type === 'text'}
               <p class="message-stream__text">{part.text}</p>
             {/if}
@@ -214,7 +240,7 @@
         </div>
       {:else}
         <div class="message-stream__assistant">
-          {#each message.parts as part, i (i)}
+          {#each message.parts as part, i (partKey(message.id, part, i))}
             {#if part.type === 'text'}
               <p class="message-stream__text">{part.text}</p>
             {:else if part.type === 'tool-grep_doc'}

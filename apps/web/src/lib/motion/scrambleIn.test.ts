@@ -157,6 +157,32 @@ describe('scrambleIn — managed-content contract (ucs-eem regression guard)', (
     expect(gsapMock.to).toHaveBeenCalledTimes(1);
   });
 
+  it('schedules each tween with `overwrite: "auto"` so rapid state transitions cannot stack stale tweens (ucs-6j9)', () => {
+    // The ucs-6j9 freeze on mid-stream scan cards was reproducible in
+    // production whenever a `state` prop flipped during the previous
+    // scramble's 280ms tween window — a common case during the rapid
+    // SSE flush at the end of a multi-tool turn. Without `overwrite`,
+    // both tweens write to `node.textContent` on every RAF tick and
+    // the first-finishing one's `onComplete` write of stale text lands
+    // last when they're scheduled within a frame of each other,
+    // freezing the pill at the previous state.
+    //
+    // Contract: every tween scheduled by the action MUST request
+    // `overwrite: "auto"` so GSAP kills any in-flight tween on the
+    // same target before the new one runs.
+    const node = document.createElement('span');
+
+    const result = scrambleIn(node, { text: 'SCANNING' });
+    result.update!({ text: '3 HITS' });
+    result.update!({ text: '5 HITS' });
+
+    expect(gsapMock.to).toHaveBeenCalledTimes(3);
+    for (const call of gsapMock.to.mock.calls) {
+      const [, vars] = call;
+      expect(vars).toMatchObject({ overwrite: 'auto' });
+    }
+  });
+
   it('writes the new text to node.textContent at each update (reduced-motion only — see GSAP test for motion path)', () => {
     // In motion mode the textContent settlement is GSAP's job (the
     // mock here is a no-op spy). The action's pre-write happens once

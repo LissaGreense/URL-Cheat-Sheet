@@ -113,11 +113,23 @@ export function scrambleIn(
   /**
    * Fire one scramble tween toward the target text. Used on mount and
    * on every subsequent `update` where `text` changed.
+   *
+   * `overwrite: 'auto'` (ucs-6j9 regression guard): when a state
+   * transition arrives during an in-flight scramble (rapid SSE chunks
+   * mid-turn — e.g. a flurry of grep_doc calls finishing within the
+   * 280ms tween window), the in-flight tween would otherwise finish
+   * AFTER the newer one and write its now-stale resolved text to
+   * `node.textContent`, freezing the pill at the previous state. With
+   * `overwrite: 'auto'`, GSAP kills any conflicting tween on the same
+   * target before scheduling the new one. The killed tween's final
+   * write never lands, and the only tween still alive resolves to the
+   * latest `text`.
    */
   function fire(text: string, durationMs: number, delayMs: number, chars: string): void {
     gsap.to(node, {
       duration: durationMs / 1000,
       delay: delayMs / 1000,
+      overwrite: 'auto',
       scrambleText: {
         text,
         chars
