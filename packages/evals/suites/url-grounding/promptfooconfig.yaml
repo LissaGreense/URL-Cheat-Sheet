@@ -7,13 +7,8 @@ defaultTest:
   assert:
     - type: regex
       value: 'L\d+'
-    - type: llm-rubric
-      value: |
-        The answer addresses the question and cites at least one Lxx line
-        reference. The cited line should plausibly support the claim. The
-        answer should not contain facts that aren't in the document.
-  options:
-    provider: anthropic:messages:claude-haiku-4-5
+    - type: javascript
+      value: 'file://../../src/asserts/grounding-judge.ts'
 tests:
   - description: HTCPCP expansion grounded in RFC 2324
     vars:
