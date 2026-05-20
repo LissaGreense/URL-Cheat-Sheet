@@ -1,0 +1,129 @@
+/**
+ * atmosphere.css — Phase 1 static atmosphere stack.
+ *
+ * Defines the five-layer ambient backdrop from spec §2.3 as utility
+ * classes consumed by `AtmosphereShell.svelte`. Phase 1 ships these as
+ * static layers; Phase 2 layers motion (turbulence drift, glow-pad
+ * drift, spec-dot float, cursor-halo follow) on top WITHOUT changing
+ * these selectors.
+ *
+ * Hard rule: no `@keyframes` in this file during Phase 1. Spec §2.3
+ * calls out the ambient motion as a Phase 2 deliverable.
+ *
+ * Depends on `tokens.css` for `--ink-*`, `--green-acid`, `--teal-glacial`,
+ * and `--hair`.
+ */
+
+/* The root container: a fixed full-viewport stack origin. Sits behind
+   page content via z-index, but is itself part of the normal flow so
+   children can render above (see AtmosphereShell composition). */
+.atmosphere {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  isolation: isolate;
+}
+
+/* Layer 1 — base body gradient. Diagonal near-black with a faint green
+   tilt at the highlight (spec §2.1 body background recipe). */
+.atmosphere__base {
+  position: fixed;
+  inset: 0;
+  z-index: -5;
+  pointer-events: none;
+  background: linear-gradient(
+    123deg,
+    var(--ink-rise),
+    var(--ink-mid),
+    var(--ink-base)
+  );
+}
+
+/* Layer 2 — ambient driver. Phase 1: a static low-opacity grain via a
+   layered repeating gradient. Phase 2 will swap this for a live SVG
+   `feTurbulence` filter or a pre-rendered PNG (spec §2.3 item 2). */
+.atmosphere__ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -4;
+  pointer-events: none;
+  opacity: 0.08;
+  background-image:
+    repeating-radial-gradient(
+      circle at 20% 30%,
+      rgba(232, 232, 230, 0.04) 0,
+      rgba(232, 232, 230, 0) 2px,
+      transparent 4px
+    ),
+    repeating-radial-gradient(
+      circle at 80% 70%,
+      rgba(232, 232, 230, 0.03) 0,
+      rgba(232, 232, 230, 0) 3px,
+      transparent 6px
+    );
+}
+
+/* Layer 3 — glow pad. Phase 1 ships ONE centered radial bloom; Phase 2
+   adds 2–3 with drift loops (spec §2.3 item 3). The class is reusable —
+   multiple `.atmosphere__glow-pad` elements with different positions
+   stack additively without new selectors. */
+.atmosphere__glow-pad {
+  position: fixed;
+  z-index: -3;
+  pointer-events: none;
+  top: 30%;
+  left: 35%;
+  width: 40vw;
+  height: 40vw;
+  opacity: 0.08;
+  background: radial-gradient(
+    circle at center,
+    var(--green-acid) 0%,
+    var(--teal-glacial) 35%,
+    transparent 70%
+  );
+  filter: blur(80px);
+}
+
+/* Layer 4 — spec dot. A single small positioned circle; multiple
+   instances render side by side via repeated DOM nodes. Phase 1 ships
+   4 dots, Phase 2 expands to ~12 with motion (spec §2.3 item 4). */
+.atmosphere__spec-dot {
+  position: fixed;
+  z-index: -2;
+  pointer-events: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--bone);
+  mix-blend-mode: overlay;
+  opacity: 0.3;
+}
+
+/* Layer 5a — scanline overlay. Static linear-gradient texture across
+   the whole document (spec §2.3 item 5). */
+.atmosphere__scanline {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.05;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(232, 232, 230, 0.6) 0,
+    rgba(232, 232, 230, 0.6) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* Layer 5b — cursor halo placeholder. Phase 1 ships this as an
+   invisible-but-present div so Phase 2 can wire `pointermove` against
+   the same selector without touching shell markup. */
+.atmosphere__cursor-halo {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+}

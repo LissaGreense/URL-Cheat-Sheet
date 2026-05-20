@@ -11,9 +11,11 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
+    "@ai-sdk/svelte": "^4.0.184",
+    "@fontsource/manrope": "^5.2.8",
+    "@fontsource/space-grotesk": "^5.2.10",
     "@url-cheat-sheet/agent": "workspace:*",
     "@url-cheat-sheet/schemas": "workspace:*",
-    "@ai-sdk/svelte": "^4.0.184",
     "ai": "^6.0.184",
     "zod": "^4.4.3"
   },
