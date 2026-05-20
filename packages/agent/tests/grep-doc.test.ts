@@ -55,3 +55,18 @@ describe('grepLines', () => {
     expect(grepLines('', 'anything')).toEqual([]);
   });
 });
+
+import { makeGrepDoc } from '../src/tools/grep-doc';
+
+describe('makeGrepDoc tool description', () => {
+  it('steers query phrasing toward distinctive substrings', () => {
+    const t = makeGrepDoc('any doc text');
+    expect(t.description).toMatch(/short distinctive substrings/i);
+  });
+
+  it('documents empty-match handling', () => {
+    const t = makeGrepDoc('any doc text');
+    expect(t.description).toMatch(/retry at most once/i);
+    expect(t.description!.toLowerCase()).toContain('not in the document');
+  });
+});

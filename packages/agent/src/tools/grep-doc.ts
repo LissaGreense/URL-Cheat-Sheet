@@ -43,7 +43,7 @@ export function grepLines(text: string, pattern: string): GrepMatch[] {
 export function makeGrepDoc(documentText: string) {
   return tool({
     description:
-      'Search the loaded document for a case-insensitive substring. Returns matching lines with up to two lines of surrounding context. Pattern is treated as literal text, not regex.',
+      'Case-insensitive substring search over document lines, with ±2 lines of context. Returns matching lines labeled Lxx. Use short distinctive substrings — section headings, unique nouns — not full sentences. Empty results mean the term is not in the document; retry at most once with a synonym, then give up and answer honestly.',
     inputSchema: z.strictObject({
       pattern: z.string().describe('Case-insensitive substring to search the loaded document.')
     }),
