@@ -36,15 +36,20 @@
 
   /**
    * Props for MessageStream.
-   * @property {Chat} chat - The live Chat instance. The component reads
-   *   `chat.messages` directly inside the template — see the file
-   *   header for why this matters.
+   * @property {Pick<Chat, 'messages'> & { status?: Chat['status'] }} chat -
+   *   The live Chat instance (or a structural mock — see
+   *   MessageStream.test-host.svelte). The component reads
+   *   `chat.messages` and `chat.status` directly inside the template —
+   *   see the file header for why this matters. `status` is optional
+   *   on the structural surface so tests can pass duck-typed mocks
+   *   without an `as any` cast at the boundary; a real `Chat` instance
+   *   always provides it.
    * @property {boolean} awaitingAssistant - True when the user has
    *   submitted but no assistant message has appeared yet. Renders a
    *   sys-voice "Thinking…" placeholder below the thread.
    */
   type Props = {
-    chat: Chat;
+    chat: Pick<Chat, 'messages'> & { status?: Chat['status'] };
     awaitingAssistant: boolean;
   };
 

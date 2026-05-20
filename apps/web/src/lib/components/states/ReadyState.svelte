@@ -36,9 +36,14 @@
    * Props for ReadyState.
    * @property {Document} document - The ingested document; only `title`
    *   is surfaced in the memory chip.
-   * @property {Chat} chat - The live Chat instance from the parent
-   *   state machine. Forwarded as-is to MessageStream so SSE reactivity
-   *   propagates — do NOT destructure `chat.messages` here.
+   * @property {Pick<Chat, 'messages'> & { status?: Chat['status'] }} chat -
+   *   The live Chat instance from the parent state machine (or a
+   *   structural mock in tests — see ReadyState.test-host.svelte).
+   *   Forwarded as-is to MessageStream so SSE reactivity propagates —
+   *   do NOT destructure `chat.messages` here. We narrow to the read
+   *   surface (`messages`, optional `status`) so the test-host can
+   *   pass a duck-typed mock without an `as any` cast at the boundary;
+   *   a real `Chat` always provides both.
    * @property {string} chatInput - Bindable composer value. Parent owns
    *   the state; this component reads + writes via the binding.
    * @property {(e: SubmitEvent) => void} onSendChat - Composer submit
@@ -50,7 +55,7 @@
    */
   type Props = {
     document: Document;
-    chat: Chat;
+    chat: Pick<Chat, 'messages'> & { status?: Chat['status'] };
     chatInput: string;
     onSendChat: (e: SubmitEvent) => void;
     onReset: () => void;

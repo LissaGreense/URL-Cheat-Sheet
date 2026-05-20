@@ -3,25 +3,25 @@
   exercise the memory chip, the greeting injection, the composer
   binding, and the onReset callback.
 
-  We pass a duck-typed `chat`-shape (with `messages` + `status`) rather
-  than a real Chat instance — see MessageStream.test-host.svelte for
-  the same pattern.
+  We pass a structural mock for `chat` (matching the parts ReadyState
+  reads — `messages` + `status`) rather than a real Chat instance —
+  see MessageStream.test-host.svelte for the same pattern. ReadyState's
+  prop is the full `Chat`, so we narrow the host's mock the same way
+  as MessageStream and forward to the real component prop. ReadyState
+  only reads `chat.messages` + `chat.status`, so the structural surface
+  is sufficient at runtime.
 -->
 <script lang="ts">
+  import type { Chat } from '@ai-sdk/svelte';
+  import type { Document } from '@url-cheat-sheet/schemas';
   import ReadyState from './ReadyState.svelte';
 
-  type ChatLike = {
-    messages: ReadonlyArray<{
-      id: string;
-      role: 'user' | 'assistant' | 'system';
-      parts: ReadonlyArray<Record<string, unknown>>;
-    }>;
-    status?: string;
-  };
+  // Structural mock — ReadyState reads `chat.messages` + `chat.status`.
+  type ChatMock = Pick<Chat, 'messages'> & { status?: Chat['status'] };
 
   type Props = {
-    document: { title: string; sourceUrl: string; text: string; headings?: unknown[] };
-    chat: ChatLike;
+    document: Document;
+    chat: ChatMock;
     chatInput: string;
     onSendChat: (e: SubmitEvent) => void;
     onReset: () => void;
@@ -30,4 +30,4 @@
   let { document, chat, chatInput = $bindable(''), onSendChat, onReset }: Props = $props();
 </script>
 
-<ReadyState document={document as any} chat={chat as any} bind:chatInput {onSendChat} {onReset} />
+<ReadyState {document} {chat} bind:chatInput {onSendChat} {onReset} />

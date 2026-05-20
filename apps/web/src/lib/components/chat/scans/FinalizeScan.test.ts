@@ -19,21 +19,41 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/svelte';
+import type { ToolUIPart } from 'ai';
 import FinalizeScan from './FinalizeScan.svelte';
 
 /**
- * Helper — build a minimal `tool-finalize` ToolUIPart-shaped object for
- * the test. We use `as any` to skirt the v6 discriminated union (which
- * lives in `ai`'s `UITools` generic and is awkward to construct
- * piecemeal in jsdom land).
+ * Narrowed `tool-finalize` part type. We parameterize `ToolUIPart` with
+ * a single-entry tools record so the resulting union has exactly one
+ * discriminant (`type: 'tool-finalize'`) with the input/output shape
+ * the `finalize` sentinel tool actually carries (see
+ * `packages/agent/src/tools/finalize.ts`).
+ *
+ * `output` is typed `unknown` to match `UITool`'s base — the sentinel
+ * has no `execute`, so the live UI never sees a populated `output`.
+ */
+type FinalizeTools = {
+  finalize: {
+    input: { answer?: string; citations?: string[] };
+    output: unknown;
+  };
+};
+type FinalizePart = ToolUIPart<FinalizeTools>;
+
+/**
+ * Helper — build a minimal `tool-finalize` part for the test. The
+ * `ToolUIPart` discriminated union is wide enough that a narrow factory
+ * keeps each call site readable. We assemble loosely (Record<string,
+ * unknown>) then cast to the narrowed `FinalizePart` at the boundary —
+ * the cast is sound because we only emit the shapes the union allows.
  */
 function fakePart(input: {
   state: string;
   answer?: string;
   citations?: string[];
   errorText?: string;
-}): any {
-  const part: any = {
+}): FinalizePart {
+  const part: Record<string, unknown> = {
     type: 'tool-finalize',
     toolCallId: 'call_1',
     state: input.state
@@ -47,7 +67,7 @@ function fakePart(input: {
       citations: input.citations ?? []
     };
   }
-  return part;
+  return part as FinalizePart;
 }
 
 afterEach(() => {
