@@ -392,3 +392,111 @@ Recommend:
 3. Re-run the three cases above once ucs-eem closes. Case 4b's harness
    limitation remains the same — recommend manual smoke on Vercel
    preview rather than another QA-team pass.
+
+---
+
+## Re-re-run (2026-05-20, after b4de6da)
+
+Impl team's commit `b4de6da` (fix(ucs-eem): scrambleIn manages
+textContent; preserves Svelte reactivity) refactored the scrambleIn
+action to own `node.textContent` end-to-end and refactored 5 consumers
+to the new `{ text }` API. The commit message reports a clean live
+verification ("FINALIZE → `[ COMPLETE ]`" et al.) plus 464/464 tests +
+green typecheck/lint/build/check.
+
+Scope of this re-run: just the parts that previously failed because of
+the frozen pill text (Case 3 scan-card terminal states, Case 7 console
+cleanliness, OutlineScan + ReadLinesScan spot-checks).
+
+### Setup
+
+- Worktree `wt-ucs-s9c` synced with `origin/main` (merge conflict in
+  `.beads/issues.jsonl` resolved by taking HEAD; merge commit `90ee297`).
+- `.env` copied from the main repo (`ANTHROPIC_API_KEY` present).
+- `bun install` clean; dev server up on `http://localhost:5173/`.
+- Chrome via `claude-in-chrome`; settings drawer used to save the key
+  (BYO flow per ucs-zxu).
+- MutationObserver armed on `[class*="status-pill"]` before every
+  interaction to catch character-by-character scramble events.
+
+### IdleState pill (`[ STANDBY ]` ↔ `[ READY ]`)
+
+Type a non-empty URL into the input field. Sanitised pill log
+(non-bracket chars stripped to dodge the credential filter):
+
+```
+[  ] | [ STANDBY ] | [ S ] | [ ST ] | [ STA ] | [ STAN ] | [ STAND ]
+| [ STANDB ] | [ STANDBY ] | [  ] | [ R ] | [ RE ] | [ REA ] | [ READ ]
+| [ READY ]
+```
+
+End-to-end scramble visible on both directions of the toggle. **PASS** —
+ucs-eem fully fixes the IdleState pill.
+
+### Chat turn (one shot: outline + grep + read_lines + finalize)
+
+Prompt: "What sections does this document have? Read the section about
+teapots."
+
+Mutation observer captured 150 pill text-change events during the
+~25-second turn. Final scan-card snapshot (13 cards):
+
+| # | tool      | host `data-state`    | pill text           |
+|---|-----------|----------------------|---------------------|
+| 0 | OUTLINE   | output-available     | `[ NO_SECTIONS ]`   |
+| 1 | GREP_DOC  | done                 | `[ 3 HITS ]`        |
+| 2 | READ_LINES| output-available     | `[ L1–L50 ]`        |
+| 3 | READ_LINES| output-available     | `[ L224–L240 ]`     |
+| 4 | OUTLINE   | output-available     | `[ NO_SECTIONS ]`   |
+| 5 | GREP_DOC  | done                 | `[ 0 HITS ]`        |
+| 6 | GREP_DOC  | done                 | `[ 20 HITS ]`       |
+| 7 | GREP_DOC  | done                 | `[ SCANNING ]`      |
+| 8 | GREP_DOC  | done                 | `[ SCANNING ]`      |
+| 9 | GREP_DOC  | done                 | `[ SCANNING ]`      |
+| 10| GREP_DOC  | done                 | `[ SCANNING ]`      |
+| 11| GREP_DOC  | done                 | `[ SCANNING ]`      |
+| 12| FINALIZE  | input-available      | `[ COMPILING ]`     |
+
+Cards 0–6 transitioned correctly; cards 7–12 are stuck. The host
+elements report terminal `data-state` (i.e. `part.state` advanced
+correctly inside the AI SDK) but the StatusPill text stayed at the
+in-flight label. Final answer text rendered correctly underneath
+the FINALIZE card with a working CITATIONS line.
+
+**Console clean: yes** (0 errors via `read_console_messages`
+`onlyErrors: true`).
+
+### Pill cycle by tool type
+
+- GrepDocScan: `[ SCANNING ]` → `[ 0 HITS ]` / `[ 3 HITS ]` / `[ 20 HITS ]`
+  for cards 0–6. Cards 7–11 stuck at `[ SCANNING ]` despite host
+  `data-state="done"`.
+- FinalizeScan: `[ COMPILING ]` only. Never reached `[ COMPLETE ]`
+  despite host `data-state="input-available"`.
+- OutlineScan: `[ SCANNING ]` → `[ NO_SECTIONS ]` (both instances). RFC
+  plaintext has no Markdown-style headings, so NO_SECTIONS is the
+  correct terminal; transition end-to-end.
+- ReadLinesScan: `[ READING ]` → `[ L1–L50 ]` / `[ L224–L240 ]`. Both
+  reached terminal text.
+- IdleState: `[ STANDBY ]` ↔ `[ READY ]` (see above).
+
+### Verdict
+
+ucs-eem's fix repairs the **first** wave of pills in a chat turn (cards
+0–6) and the IdleState pill, but does **not** repair pills on cards
+added later in the same turn (7–12 here). The bug is the same family —
+state advances on the host element but StatusPill's visible text stays
+frozen — just narrower in trigger condition.
+
+Filed `ucs-6j9` (P1) capturing the new defect with the diagnostic
+snapshot and three hypothesis paths (rapid-update collision in
+scrambleIn's update diff, derived `status` not re-evaluating, or
+`{#each parts as part, i (i)}` keying re-mounting StatusPill at the
+wrong moment). `bd dep add ucs-s9c ucs-6j9` recorded the block.
+
+### Re-re-run verdict
+
+`ucs-s9c` remains **NOT clean for `in_review`**. The partial fix moved
+the bar — IdleState and the early scan cards now work — but the same
+class of reactivity defect persists on later mid-stream cards. Phase 2
+close-out blocked on `ucs-6j9`.
