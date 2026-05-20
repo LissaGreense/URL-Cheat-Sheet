@@ -46,6 +46,17 @@
    *   a real `Chat` always provides both.
    * @property {string} chatInput - Bindable composer value. Parent owns
    *   the state; this component reads + writes via the binding.
+   * @property {boolean} [keySet] - Whether the BYO Anthropic key is
+   *   currently set in the parent's `apiKey` rune (ucs-88j). When
+   *   `false`/omitted, the composer is disabled and the placeholder
+   *   directs the user to add a key in settings. Defaults to `true`
+   *   to keep test-hosts that don't care about the BYO-key gating
+   *   working unchanged.
+   * @property {string | null} [inlineError] - Optional inline error
+   *   surface above the composer for the BYO-key error taxonomy
+   *   (ucs-88j, spec § Error taxonomy). The 429 and 502 buckets
+   *   render here without clearing the key; the 401/400 buckets are
+   *   handled at the page level by reopening the drawer.
    * @property {(e: SubmitEvent) => void} onSendChat - Composer submit
    *   handler. Parent (`sendChat`) preventDefaults + sends via the
    *   Chat transport.
@@ -57,11 +68,21 @@
     document: Document;
     chat: Pick<Chat, 'messages'> & { status?: Chat['status'] };
     chatInput: string;
+    keySet?: boolean | undefined;
+    inlineError?: string | null | undefined;
     onSendChat: (e: SubmitEvent) => void;
     onReset: () => void;
   };
 
-  let { document, chat, chatInput = $bindable(''), onSendChat, onReset }: Props = $props();
+  let {
+    document,
+    chat,
+    chatInput = $bindable(''),
+    keySet = true,
+    inlineError = null,
+    onSendChat,
+    onReset
+  }: Props = $props();
 
   /**
    * Empty-thread greeting — auto-rendered as the first thing the user
@@ -84,11 +105,26 @@
   );
 
   /**
-   * Disable the composer while the chat is in-flight. Matches the
-   * pre-redesign +page.svelte behavior: streaming OR submitted both
-   * lock the input so the user can't queue a second turn mid-stream.
+   * Disable the composer while the chat is in-flight OR when the BYO
+   * Anthropic key has not been set. Matches the pre-redesign
+   * +page.svelte behavior: streaming OR submitted both lock the input
+   * so the user can't queue a second turn mid-stream. The `!keySet`
+   * arm (ucs-88j) blocks the user from sending a request that the
+   * server would just 400 on.
    */
-  const composerDisabled = $derived(chat.status === 'streaming' || chat.status === 'submitted');
+  const composerDisabled = $derived(
+    chat.status === 'streaming' || chat.status === 'submitted' || !keySet
+  );
+
+  /**
+   * Placeholder swaps when no key is set so the disabled state
+   * communicates *why* it's disabled (spec § UX surface). The
+   * Composer component owns the default "Ask about this page..."
+   * copy; we only override when we need to.
+   */
+  const composerPlaceholder = $derived(
+    keySet ? undefined : 'Add your Anthropic API key in settings to start chatting'
+  );
 </script>
 
 <CornerStamp text="001 SESSION" position="bottom-right" />
@@ -138,9 +174,22 @@
 
   <!--
     Composer pinned bottom — only un-dimmed surface per spec §4.5.
+    The optional inline error sits *above* the composer (spec §
+    Error taxonomy, ucs-88j) for the 429 + generic buckets that
+    don't reopen the drawer.
   -->
   <div class="ready-state__composer">
-    <Composer bind:value={chatInput} disabled={composerDisabled} onSubmit={onSendChat} />
+    {#if inlineError}
+      <p class="ready-state__inline-error" data-testid="ready-inline-error" role="alert">
+        {inlineError}
+      </p>
+    {/if}
+    <Composer
+      bind:value={chatInput}
+      disabled={composerDisabled}
+      placeholder={composerPlaceholder}
+      onSubmit={onSendChat}
+    />
   </div>
 </div>
 
@@ -254,5 +303,19 @@
   */
   .ready-state__composer {
     width: 100%;
+  }
+
+  /*
+    Inline error surface for the BYO-key 429/generic buckets (ucs-88j).
+    Sits above the composer; amber-alarm tone matches the drawer's
+    error styling so the visual language is consistent across the
+    error taxonomy.
+  */
+  .ready-state__inline-error {
+    margin: 0 0 0.5rem;
+    color: var(--amber-alarm);
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    line-height: 1.4;
   }
 </style>

@@ -22,7 +22,13 @@
    *   the state (`chatInput` in `+page.svelte`); this component reads
    *   + writes via the binding.
    * @property {boolean} disabled - When true, disables both the input
-   *   and the submit button (e.g. while the chat is streaming).
+   *   and the submit button (e.g. while the chat is streaming, or when
+   *   the BYO Anthropic key has not yet been set).
+   * @property {string} [placeholder] - Optional override for the input
+   *   placeholder. Defaults to "Ask about this page...". The BYO-key
+   *   flow (ucs-88j) overrides this with "Add your Anthropic API key
+   *   in settings to start chatting" when no key is set, so the
+   *   disabled state communicates *why* it's disabled.
    * @property {(e: SubmitEvent) => void} onSubmit - Form submit
    *   handler. The parent (`sendChat`) preventDefaults and reads the
    *   bound value.
@@ -30,10 +36,16 @@
   type Props = {
     value: string;
     disabled: boolean;
+    placeholder?: string | undefined;
     onSubmit: (e: SubmitEvent) => void;
   };
 
-  let { value = $bindable(''), disabled, onSubmit }: Props = $props();
+  let {
+    value = $bindable(''),
+    disabled,
+    placeholder = 'Ask about this page...',
+    onSubmit
+  }: Props = $props();
 
   // `$derived` so the button tracks both `value` (non-empty trimmed)
   // and `disabled` — keystroke updates flip it without an explicit
@@ -48,7 +60,7 @@
         type="text"
         class="composer__input"
         bind:value
-        placeholder="Ask about this page..."
+        {placeholder}
         aria-label="Message"
         {disabled}
       />
