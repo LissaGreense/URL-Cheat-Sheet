@@ -39,18 +39,23 @@
 
 <!--
   Two actions co-exist on the inner <span>:
-    - `scrambleIn` reveals the state text on mount (Task 9).
+    - `scrambleIn` writes + scrambles the state text on mount and re-fires
+      on every `state` change (Task 9, ucs-eem managed-content contract).
     - `phosphorFlash` pulses on every `state` change (Task 10) —
       `trigger: state` re-fires the keyframe each transition like
       `[ STANDBY ]` → `[ READY ]`.
-  Svelte allows stacking multiple `use:` directives on one element.
+  The inner <span> intentionally has NO `{state}` interpolation —
+  `scrambleIn` owns its text content (ucs-eem). If Svelte tracked a text
+  node inside the span, GSAP's ScrambleTextPlugin would orphan it on the
+  first mount and subsequent state changes would write to a detached node.
 -->
 <span
   class="status-pill"
   class:status-pill--alarm={tone === 'alarm'}
   class:status-pill--dim={tone === 'dim'}
 >
-  [ <span use:scrambleIn use:phosphorFlash={{ trigger: state, color: flashColor }}>{state}</span> ]
+  [ <span use:scrambleIn={{ text: state }} use:phosphorFlash={{ trigger: state, color: flashColor }}
+  ></span> ]
 </span>
 
 <style>

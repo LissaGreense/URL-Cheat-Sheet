@@ -160,7 +160,15 @@ export function assembleCascade(
             if (added.nodeType !== Node.ELEMENT_NODE) continue;
             const el = added as Element;
             if (!el.matches(LINE_SELECTOR)) continue;
-            scrambleIn(el as HTMLElement, { duration: PER_LINE_SCRAMBLE_MS });
+            // Capture the line's text BEFORE handing the element to
+            // scrambleIn — the action manages textContent end-to-end
+            // per the ucs-eem contract. Each streamed line is an
+            // atomic unit (text doesn't mutate after insertion), so a
+            // one-shot capture is correct here.
+            scrambleIn(el as HTMLElement, {
+              text: el.textContent ?? '',
+              duration: PER_LINE_SCRAMBLE_MS
+            });
           }
         }
       });

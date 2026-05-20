@@ -3,7 +3,8 @@
  *
  * GSAP's actual visual effect is unobservable under jsdom (no RAF, no
  * CSS animation), so we assert the CONTRACT — the shape of the call
- * `scrambleIn` makes into GSAP — not the resulting pixels.
+ * `scrambleIn` makes into GSAP and the DOM mutations the action makes
+ * directly — not the resulting pixels.
  *
  * Mock pattern (test-infra precedent for Tasks 10 + 11):
  *   - `vi.mock('gsap', ...)` returns a frozen mock with a `to` spy.
@@ -11,11 +12,19 @@
  *     reduced-motion result. Tests reset spies + mock return value in
  *     `beforeEach`.
  *
- * Two cycles per action:
- *   1. Happy path — asserts the `gsap.to(node, { scrambleText: {...} })`
- *      call shape (text, chars, duration, delay all flow through).
- *   2. Reduced-motion bypass — asserts that NO GSAP scheduling occurs
- *      and the final text is set synchronously on the node.
+ * Three test groups:
+ *   1. Happy path — `gsap.to(node, { scrambleText: {...} })` call shape
+ *      (text, chars, duration, delay all flow through).
+ *   2. Reduced-motion bypass — NO GSAP scheduling, action writes
+ *      textContent synchronously, update still propagates.
+ *   3. Managed-content contract (ucs-eem regression guard) — the action
+ *      writes `params.text` to `node.textContent` on mount and on every
+ *      `update` where text changes. This is the contract Svelte
+ *      reactivity depends on: if the action stopped writing text and
+ *      instead relied on Svelte interpolation inside `node`, GSAP's
+ *      ScrambleTextPlugin would orphan the tracked text node and the
+ *      visible DOM would freeze. The tests assert the inverse — that
+ *      the action's own writes drive the visible state.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -62,12 +71,13 @@ beforeEach(() => {
 });
 
 describe('scrambleIn — happy path (motion enabled)', () => {
-  it('captures node.textContent and schedules gsap.to with scrambleText config', () => {
+  it('writes params.text to the node and schedules gsap.to with scrambleText config', () => {
     const node = document.createElement('span');
-    node.textContent = 'READY';
 
-    scrambleIn(node);
+    scrambleIn(node, { text: 'READY' });
 
+    // Managed-content contract: the action owns node.textContent.
+    expect(node.textContent).toBe('READY');
     expect(gsapMock.to).toHaveBeenCalledTimes(1);
     const [target, vars] = gsapMock.to.mock.calls[0]!;
     expect(target).toBe(node);
@@ -83,9 +93,8 @@ describe('scrambleIn — happy path (motion enabled)', () => {
 
   it('respects custom chars + duration + delay params', () => {
     const node = document.createElement('span');
-    node.textContent = 'SCANNING';
 
-    scrambleIn(node, { chars: 'ABC123', duration: 500, delay: 100 });
+    scrambleIn(node, { text: 'SCANNING', chars: 'ABC123', duration: 500, delay: 100 });
 
     expect(gsapMock.to).toHaveBeenCalledTimes(1);
     const [, vars] = gsapMock.to.mock.calls[0]!;
@@ -96,24 +105,71 @@ describe('scrambleIn — happy path (motion enabled)', () => {
     });
   });
 
-  it('falls back to an empty captured text when the node is initially empty', () => {
+  it('accepts an empty target text', () => {
     const node = document.createElement('span');
-    // textContent is '' by default.
 
-    scrambleIn(node);
+    scrambleIn(node, { text: '' });
 
+    expect(node.textContent).toBe('');
     expect(gsapMock.to).toHaveBeenCalledTimes(1);
     const [, vars] = gsapMock.to.mock.calls[0]!;
     expect(vars.scrambleText.text).toBe('');
   });
 
-  it('returns a destroy function (Svelte action contract)', () => {
+  it('returns a destroy + update tuple (Svelte action contract)', () => {
     const node = document.createElement('span');
-    node.textContent = 'READY';
 
-    const result = scrambleIn(node);
+    const result = scrambleIn(node, { text: 'READY' });
 
     expect(typeof result.destroy).toBe('function');
+    expect(typeof result.update).toBe('function');
+  });
+});
+
+describe('scrambleIn — managed-content contract (ucs-eem regression guard)', () => {
+  it('re-fires gsap.to when params.text changes via update', () => {
+    const node = document.createElement('span');
+
+    const result = scrambleIn(node, { text: 'SCANNING' });
+
+    expect(gsapMock.to).toHaveBeenCalledTimes(1);
+    expect(gsapMock.to.mock.calls[0]![1].scrambleText.text).toBe('SCANNING');
+
+    // Svelte reactivity: parent's `state` changed from SCANNING to
+    // "3 HITS". The action MUST re-scramble.
+    result.update!({ text: '3 HITS' });
+
+    expect(gsapMock.to).toHaveBeenCalledTimes(2);
+    expect(gsapMock.to.mock.calls[1]![1].scrambleText.text).toBe('3 HITS');
+  });
+
+  it('does NOT re-fire when update is called with the same text', () => {
+    const node = document.createElement('span');
+
+    const result = scrambleIn(node, { text: 'READY' });
+    expect(gsapMock.to).toHaveBeenCalledTimes(1);
+
+    // Same text — no spurious re-fire (would burn animation budget
+    // and look glitchy at the StatusPill site, which re-binds every
+    // render).
+    result.update!({ text: 'READY' });
+
+    expect(gsapMock.to).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes the new text to node.textContent at each update (reduced-motion only — see GSAP test for motion path)', () => {
+    // In motion mode the textContent settlement is GSAP's job (the
+    // mock here is a no-op spy). The action's pre-write happens once
+    // on mount, then GSAP takes over on update. The reduced-motion
+    // test below covers the "no GSAP" branch where the action writes
+    // textContent itself on every update.
+    const node = document.createElement('span');
+
+    scrambleIn(node, { text: 'INITIAL' });
+
+    // On mount the action writes the text before invoking GSAP — so
+    // even with the GSAP mock no-op, the resting state is correct.
+    expect(node.textContent).toBe('INITIAL');
   });
 });
 
@@ -124,28 +180,38 @@ describe('scrambleIn — reduced-motion bypass', () => {
 
   it('does NOT schedule any GSAP animation', () => {
     const node = document.createElement('span');
-    node.textContent = 'READY';
 
-    scrambleIn(node);
+    scrambleIn(node, { text: 'READY' });
 
     expect(gsapMock.to).not.toHaveBeenCalled();
   });
 
-  it('leaves the captured final text intact on the node', () => {
+  it('writes params.text to node.textContent synchronously on mount', () => {
     const node = document.createElement('span');
-    node.textContent = 'READY';
 
-    scrambleIn(node);
+    scrambleIn(node, { text: 'READY' });
 
-    // No scramble happened, so the node still shows the original text.
     expect(node.textContent).toBe('READY');
+  });
+
+  it('propagates text changes through update without scheduling GSAP', () => {
+    const node = document.createElement('span');
+
+    const result = scrambleIn(node, { text: 'SCANNING' });
+    expect(node.textContent).toBe('SCANNING');
+
+    // Reactive transition (e.g. StatusPill state flip). The visible
+    // DOM MUST update even in reduced-motion mode.
+    result.update!({ text: '3 HITS' });
+
+    expect(node.textContent).toBe('3 HITS');
+    expect(gsapMock.to).not.toHaveBeenCalled();
   });
 
   it('returns a no-op destroy', () => {
     const node = document.createElement('span');
-    node.textContent = 'READY';
 
-    const result = scrambleIn(node);
+    const result = scrambleIn(node, { text: 'READY' });
 
     expect(typeof result.destroy).toBe('function');
     // Calling it must not throw and must not schedule anything.

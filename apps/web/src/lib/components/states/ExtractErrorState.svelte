@@ -69,13 +69,17 @@
       <p class="extract-error-message">{message}</p>
       <!--
         `scrambleIn` on the error code (Task 13, spec §4.3). The code
-        is a pure-text leaf so the scramble plugin can tween it
-        without disturbing surrounding markup. Plays once on mount;
-        a fresh ExtractErrorState mount (new error) re-runs it.
+        is a pure-text leaf; the action owns its content per the
+        ucs-eem managed-content contract — pass via `text:`, not as a
+        Svelte child. Plays once on mount; a fresh ExtractErrorState
+        mount (new error) re-runs it, and an in-place errorCode change
+        re-fires the scramble via the action's `update`.
       -->
-      <span class="extract-error-code" data-testid="extract-error-code" use:scrambleIn
-        >{errorCode}</span
-      >
+      <span
+        class="extract-error-code"
+        data-testid="extract-error-code"
+        use:scrambleIn={{ text: errorCode }}
+      ></span>
     </div>
   </HudPanel>
 
