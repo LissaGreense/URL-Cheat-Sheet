@@ -1,7 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SYSTEM_PROMPT } from '../src/prompt.ts';
 import { makeGrepDoc } from '../src/tools/grep-doc.ts';
 import { streamChat } from '../src/agent.ts';
+import { streamText, type UIMessage } from 'ai';
+import type { Document } from '@url-cheat-sheet/schemas';
+
+vi.mock('ai', async () => {
+  const actual = await vi.importActual<typeof import('ai')>('ai');
+  return {
+    ...actual,
+    streamText: vi.fn(() => ({
+      toUIMessageStreamResponse: () => new Response('')
+    }))
+  };
+});
 
 describe('SYSTEM_PROMPT', () => {
   it('instructs the model to ground claims via grep_doc', () => {
@@ -20,6 +32,10 @@ describe('SYSTEM_PROMPT', () => {
 });
 
 describe('streamChat', () => {
+  beforeEach(() => {
+    vi.mocked(streamText).mockClear();
+  });
+
   it('is callable (verified at type level)', () => {
     expect(typeof streamChat).toBe('function');
   });
@@ -27,5 +43,21 @@ describe('streamChat', () => {
   it('makeGrepDoc returns a tool with an inputSchema', () => {
     const t = makeGrepDoc('hello world');
     expect(t.inputSchema).toBeDefined();
+  });
+
+  it('passes temperature: 0 to streamText for grounded QA reproducibility', async () => {
+    const messages: UIMessage[] = [
+      { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }
+    ];
+    const document: Document = {
+      text: 'hello world',
+      title: 'doc',
+      sourceUrl: 'https://example.com/doc'
+    };
+
+    await streamChat(messages, document);
+
+    expect(vi.mocked(streamText)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(streamText).mock.calls[0]![0]!.temperature).toBe(0);
   });
 });
