@@ -213,8 +213,7 @@ describe('streamChat', () => {
     // fixed string — the AI SDK default String(err) would otherwise splash
     // the provider's echoed request payload into the client stream.
     const leakyErr = new Error('rate limit');
-    (leakyErr as unknown as { responseBody: string }).responseBody =
-      '{"apiKey":"sk-ant-LEAK"}';
+    (leakyErr as unknown as { responseBody: string }).responseBody = '{"apiKey":"sk-ant-LEAK"}';
     expect(opts!.onError!(leakyErr)).toBe('Upstream provider error');
     expect(opts!.onError!('plain string error')).toBe('Upstream provider error');
     expect(opts!.onError!(undefined)).toBe('Upstream provider error');
