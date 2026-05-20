@@ -31,12 +31,7 @@
   inset: 0;
   z-index: -5;
   pointer-events: none;
-  background: linear-gradient(
-    123deg,
-    var(--ink-rise),
-    var(--ink-mid),
-    var(--ink-base)
-  );
+  background: linear-gradient(123deg, var(--ink-rise), var(--ink-mid), var(--ink-base));
 }
 
 /* Layer 2 — ambient driver. Phase 1: a static low-opacity grain via a
