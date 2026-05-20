@@ -15,26 +15,13 @@ version control), so fresh clones or new worktrees need to re-run it.
 
 ### `pre-push`
 
-Refuses any push whose remote ref is `refs/heads/main`. This is the active
-enforcement mechanism for the **"never push to `main` directly"** hard rule
-defined in [ADR 0005](../../docs/adr/0005-branch-first-and-branch-protection.md).
-
-**Why a local hook instead of GitHub branch protection?**
-
-GitHub gates both classic branch protection AND newer rulesets behind
-GitHub Pro for private repositories. This repo is private and on the free tier.
-The local pre-push hook is the free, version-controlled alternative.
-
-**Equivalent server-side payload:** [`../branch-protection.json`](../branch-protection.json)
-documents what the GitHub-side enforcement would look like if the repo ever
-goes public or upgrades to Pro. Use it via:
-
-```bash
-gh api -X PUT repos/<owner>/<repo>/branches/main/protection \
-  --input scripts/branch-protection.json
-```
-
-(Requires Pro or public repo.)
+Refuses any push whose remote ref is `refs/heads/main`. Defense-in-depth
+mirror of GitHub's server-side branch protection on `main` — both block
+the same thing, but the local hook fails before the round-trip to GitHub
+and works offline. See [ADR 0005](../../docs/adr/0005-branch-first-and-branch-protection.md)
+for the full history (the 2026-05-18 and 2026-05-19 addendums describe a
+~48-hour private-tier window; the 2026-05-20 addendum is the current
+state of the world).
 
 **Bypass for emergencies:** `git push --no-verify`. Don't use it; if you do,
 file a `gate:incident` bd issue.
