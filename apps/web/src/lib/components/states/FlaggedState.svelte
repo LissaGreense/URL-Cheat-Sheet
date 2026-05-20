@@ -88,12 +88,15 @@
         becomes its own clip-path-revealed line with the 60ms stagger
         from the action's default. Per-row `scrambleIn` on the
         `.flagged-threat__type` pure-text span resolves the threat
-        name with the cinematic glyph set.
+        name with the cinematic glyph set. The action owns the span's
+        content per the ucs-eem managed-content contract (`text:` param,
+        not Svelte child) so a fresh threat-row keyed reuse still
+        re-scrambles cleanly.
       -->
       <ul class="flagged-threats" use:splitLineReveal>
         {#each preview.scan.threats as threat, i (threat.type + i)}
           <li class="flagged-threat" data-testid="threat-row">
-            <span class="flagged-threat__type" use:scrambleIn>{threat.type}</span>
+            <span class="flagged-threat__type" use:scrambleIn={{ text: threat.type }}></span>
             <div class="flagged-threat__bar-track" aria-hidden="true">
               <div
                 class="flagged-threat__bar"

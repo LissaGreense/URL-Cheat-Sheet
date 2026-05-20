@@ -82,6 +82,29 @@ describe('GrepDocScan', () => {
     expect(container.textContent).toContain('"green tea"');
   });
 
+  it('renders an OR-union query verbatim when MessageStream joins array patterns', () => {
+    // The tool schema (packages/agent/src/tools/grep-doc.ts) accepts
+    // `pattern: string | string[]`. The array form is rendered by
+    // MessageStream as `a | b | c` (ucs-aoo fix). This test pins the
+    // contract that GrepDocScan renders that joined string verbatim,
+    // not just a single token.
+    const { container } = render(GrepDocScan, {
+      props: { query: 'error | exception | fault', state: 'scanning' }
+    });
+    expect(container.textContent).toContain('"error | exception | fault"');
+  });
+
+  it('renders the hit count verbatim — array length is provided by the mapper, not the scan', () => {
+    // Regression pin for ucs-ozi. MessageStream.hitsFor maps
+    // `output.matches.length` to the `hits` prop; GrepDocScan just
+    // renders the number. We verify that path here: any positive count
+    // surfaces in the `<n> HITS` pill verbatim.
+    const { container } = render(GrepDocScan, {
+      props: { query: 'tea', state: 'done', hits: 7 }
+    });
+    expect(container.querySelector('.status-pill')!.textContent?.trim()).toBe('[ 7 HITS ]');
+  });
+
   it('renders the GREP_DOC tool name in the header', () => {
     const { container } = render(GrepDocScan, {
       props: { query: 'tea', state: 'scanning' }

@@ -45,12 +45,13 @@
 <div class="extracting-state">
   <!--
     `scrambleIn` on the URL — spec §4.2 calls for "subtle scramble-text
-    on the URL during ingest". The action captures `textContent` at
-    mount and resolves through the cinematic glyph set. Under
-    reduced-motion the action is a no-op, so the URL is visible
-    immediately for those users.
+    on the URL during ingest". The action owns the element's text
+    content per the ucs-eem managed-content contract (passes the
+    target via `text:`, not as a Svelte child). Under reduced-motion
+    the action writes the text synchronously without GSAP, so the URL
+    is visible immediately for those users.
   -->
-  <p class="extracting-url" data-testid="extracting-url" use:scrambleIn>{displayUrl}</p>
+  <p class="extracting-url" data-testid="extracting-url" use:scrambleIn={{ text: displayUrl }}></p>
 
   <HudPanel ticks={true}>
     <div class="extracting-panel-body">
