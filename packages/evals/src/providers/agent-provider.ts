@@ -75,7 +75,17 @@ export default class AgentProvider implements ApiProvider {
       }
     ];
 
-    const response = await streamChat(messages, document);
+    // BYO-key (ucs-9bk): streamChat now requires apiKey as a 3rd arg.
+    // The eval harness exports ANTHROPIC_API_KEY into the shell before
+    // invoking the suite (see docs/evals/url-grounding-verification-*),
+    // so we read from process.env here. If the env var is missing, the
+    // provider returns a clear error instead of a misleading 401 from
+    // Anthropic with an empty key.
+    const apiKey = process.env['ANTHROPIC_API_KEY'];
+    if (!apiKey) {
+      return { error: 'AgentProvider: ANTHROPIC_API_KEY not set in environment' };
+    }
+    const response = await streamChat(messages, document, apiKey);
     return {
       output: await drainAssistantText(response),
       metadata: {

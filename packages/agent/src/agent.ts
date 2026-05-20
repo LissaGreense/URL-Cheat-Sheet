@@ -1,4 +1,4 @@
-import { anthropic } from '@ai-sdk/anthropic';
+import { createAnthropic } from '@ai-sdk/anthropic';
 import {
   convertToModelMessages,
   hasToolCall,
@@ -44,6 +44,31 @@ const FORCE_FINALIZE_AT_STEP = STEP_BUDGET - 1;
  * call grep/outline/read_lines tools to explore, then MUST end its turn by
  * calling `finalize` with its answer + citations.
  *
+ * **Per-request isolation (BYO key).** The `apiKey` is the user-supplied
+ * Anthropic key from the current chat turn's request body. The provider is
+ * constructed *inside* this function via `createAnthropic({ apiKey })` —
+ * never at module scope, never cached, never attached to `globalThis`. When
+ * this function returns, the closure drops and the key goes out of scope.
+ * See `docs/specs/2026-05-20-byo-anthropic-key.md` § "Server-side
+ * discipline" and § "Per-request isolation" for why this is normative.
+ *
+ * **AbortSignal threading.** The caller (the `/api/chat` route handler)
+ * should pass `event.request.signal` so that a browser navigation, tab
+ * close, or explicit Stop click aborts the Anthropic fetch — without this
+ * an abandoned stream keeps the function (and the user's spend) alive
+ * until the platform's max-duration cap.
+ *
+ * **Error handling.** Two layers of error sanitization protect the user's
+ * key and request body from leaking:
+ *   - `streamText({ onError })` observes errors server-side; the handler
+ *     logs a redacted summary and never touches `err.responseBody` (which
+ *     would otherwise contain the provider's echoed request payload).
+ *   - `toUIMessageStreamResponse({ onError })` overrides the AI SDK's
+ *     default `String(err)` with a fixed `'Upstream provider error'`
+ *     string. Errors thrown *after* response headers have flushed surface
+ *     as in-stream `error` parts; the fixed string keeps those safe
+ *     regardless of what Anthropic returns.
+ *
  * Structural empty-output prevention is a 3-layer cake:
  *   1. `hasToolCall('finalize')` stop condition halts immediately when the
  *      model voluntarily calls `finalize` (the normal happy path).
@@ -57,8 +82,24 @@ const FORCE_FINALIZE_AT_STEP = STEP_BUDGET - 1;
  *
  * Returns a `Response` carrying the AI SDK UI message stream — the caller
  * pipes it straight back to the client.
+ *
+ * @param messages The UI message history from the @ai-sdk/svelte Chat client.
+ * @param document The per-request grounding document (text + headings).
+ * @param apiKey The user-supplied Anthropic API key (request-scoped only).
+ * @param abortSignal Optional signal that aborts the upstream fetch when
+ *   the client disconnects.
  */
-export async function streamChat(messages: UIMessage[], document: Document): Promise<Response> {
+export async function streamChat(
+  messages: UIMessage[],
+  document: Document,
+  apiKey: string,
+  abortSignal?: AbortSignal
+): Promise<Response> {
+  // Provider is constructed INSIDE the function body. Hoisting this to
+  // module scope (or caching it keyed by apiKey) would create a
+  // cross-user leak path — the spec forbids this explicitly.
+  const provider = createAnthropic({ apiKey });
+
   // The cast to `ToolSet` is required because `exactOptionalPropertyTypes`
   // breaks variance on `Schema<OBJECT>['_type']`: a heterogeneous tools
   // object literal (one tool with `execute`, one without) cannot satisfy
@@ -71,13 +112,32 @@ export async function streamChat(messages: UIMessage[], document: Document): Pro
     outline: makeOutline(document.text, document.headings),
     read_lines: makeReadLines(document.text)
   } as unknown as ToolSet;
+
   const result = streamText({
-    model: anthropic('claude-sonnet-4-6'),
+    model: provider('claude-sonnet-4-6'),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
     tools,
     stopWhen: [stepCountIs(STEP_BUDGET), hasToolCall('finalize')],
     temperature: 0,
+    // Spread conditionally so `exactOptionalPropertyTypes` doesn't see
+    // an explicit `abortSignal: undefined` (which the AI SDK's optional
+    // typing rejects).
+    ...(abortSignal ? { abortSignal } : {}),
+    onError: ({ error }) => {
+      // Redacted summary only. NEVER pass `error` directly to console.* —
+      // the AI SDK's APICallError carries `responseBody` which can contain
+      // the provider's echoed request payload (including the apiKey).
+      const summary: { kind: string; statusCode?: number; name?: string } = {
+        kind: 'streamText.error'
+      };
+      if (error instanceof Error) {
+        summary.name = error.name;
+        const sc = (error as { statusCode?: unknown }).statusCode;
+        if (typeof sc === 'number') summary.statusCode = sc;
+      }
+      console.error(summary);
+    },
     prepareStep: ({ stepNumber }) => {
       // On the last allowed step, force the model to call finalize. This is
       // the structural backstop for ucs-0f3: without it, the model can burn
@@ -88,5 +148,11 @@ export async function streamChat(messages: UIMessage[], document: Document): Pro
       return undefined;
     }
   });
-  return result.toUIMessageStreamResponse();
+
+  return result.toUIMessageStreamResponse({
+    // Fixed string for every error — the AI SDK default `String(err)`
+    // could splash `err.responseBody` (containing the provider's echoed
+    // request payload, including the apiKey) into the client stream.
+    onError: () => 'Upstream provider error'
+  });
 }

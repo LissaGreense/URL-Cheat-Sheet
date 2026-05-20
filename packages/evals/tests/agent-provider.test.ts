@@ -82,6 +82,12 @@ describe('AgentProvider', () => {
     vi.mocked(safeFetch).mockReset();
     vi.mocked(extractContent).mockReset();
     vi.mocked(streamChat).mockReset();
+    // BYO-key (ucs-9bk): the provider now reads ANTHROPIC_API_KEY from
+    // env and short-circuits with a clear error when it's missing. The
+    // existing happy-path tests don't intend to exercise that branch,
+    // so seed a placeholder. Tests that DO want the missing-key path
+    // set this to undefined explicitly.
+    process.env['ANTHROPIC_API_KEY'] = 'sk-ant-test-key';
   });
 
   it('round-trips a constructor-supplied id', () => {
