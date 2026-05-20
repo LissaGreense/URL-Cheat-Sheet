@@ -11,6 +11,8 @@ import type { Document } from '@url-cheat-sheet/schemas';
 import { SYSTEM_PROMPT } from './prompt';
 import { makeGrepDoc } from './tools/grep-doc';
 import { finalize } from './tools/finalize';
+import { makeOutline } from './tools/outline';
+import { makeReadLines } from './tools/read-lines';
 
 /**
  * Stream a chat response grounded in the supplied document. The model may
@@ -33,7 +35,9 @@ export async function streamChat(messages: UIMessage[], document: Document): Pro
   // is unchanged; only the input-schema variance check is bypassed.
   const tools = {
     grep_doc: makeGrepDoc(document.text),
-    finalize
+    finalize,
+    outline: makeOutline(document.text, document.headings),
+    read_lines: makeReadLines(document.text)
   } as unknown as ToolSet;
   const result = streamText({
     model: anthropic('claude-sonnet-4-6'),
