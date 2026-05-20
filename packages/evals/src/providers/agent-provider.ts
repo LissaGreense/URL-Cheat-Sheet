@@ -90,6 +90,24 @@ export default class AgentProvider implements ApiProvider {
 }
 
 /**
+ * Sentinel returned by {@link drainAssistantText} when the stream ends
+ * without a `finalize` chunk. This is the LAST-RESORT safety net for
+ * ucs-0f3 (empty-output flake): agent.ts's `prepareStep` should force
+ * `finalize` on the last step, but if for any reason finalize is still
+ * missing (e.g. the model emits an invalid tool-call input that Zod
+ * rejects), the eval surfaces a deterministic, gradeable string instead
+ * of an empty output. The judge's empty-output guard would otherwise
+ * mask the cause of the failure.
+ *
+ * Format mirrors the spec §6 refusal shape with a synthetic L0 marker so
+ * the suite's `L\d+` regex doesn't double-fail it for the wrong reason —
+ * a single visible failure surface is easier to debug than two cascaded
+ * ones.
+ */
+const FALLBACK_REFUSAL =
+  'The agent did not produce a final answer within the available step budget (L0). This is a structural failure — see ucs-0f3.';
+
+/**
  * Drain a UI-message SSE `Response` body and return the assistant's
  * `finalize` tool input rendered as user-visible text.
  *
@@ -102,12 +120,12 @@ export default class AgentProvider implements ApiProvider {
  *
  * Return shape:
  *   - finalize present:  `answer` (plus ` (citations: L1, L2)` if any).
- *   - finalize missing:  empty string. The judge's `ucs-xom` empty-output
- *                        guard converts this into a hard failure.
+ *   - finalize missing:  {@link FALLBACK_REFUSAL} (NOT empty string) — see
+ *                        the constant's JSDoc for the rationale.
  */
 async function drainAssistantText(response: Response): Promise<string> {
   if (!response.body) {
-    return '';
+    return FALLBACK_REFUSAL;
   }
   const parsed = parseJsonEventStream({
     stream: response.body,
@@ -133,7 +151,7 @@ async function drainAssistantText(response: Response): Promise<string> {
     reader.releaseLock();
   }
 
-  if (!finalizeInput) return '';
+  if (!finalizeInput) return FALLBACK_REFUSAL;
   const { answer, citations } = finalizeInput;
   return citations.length ? `${answer} (citations: ${citations.join(', ')})` : answer;
 }

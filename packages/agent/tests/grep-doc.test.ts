@@ -54,6 +54,35 @@ describe('grepLines', () => {
   it('handles empty document', () => {
     expect(grepLines('', 'anything')).toEqual([]);
   });
+
+  it('accepts an array of patterns and OR-unions the matches (ucs-0f3)', () => {
+    // sample has 'coffee' at L2 and 'COFFEE' at L4; 'seventh' only at L7.
+    // OR union should hit lines 2, 4, AND 7 in one call — what previously
+    // required 2 separate calls for { coffee, seventh }.
+    const matches = grepLines(sample, ['coffee', 'seventh']);
+    expect(matches.map((m) => m.line)).toEqual([2, 4, 7]);
+  });
+
+  it('OR with single-item array matches single-string behavior', () => {
+    const singleStr = grepLines(sample, 'coffee').map((m) => m.line);
+    const singleArr = grepLines(sample, ['coffee']).map((m) => m.line);
+    expect(singleArr).toEqual(singleStr);
+  });
+
+  it('OR returns empty when no pattern hits', () => {
+    expect(grepLines(sample, ['matcha', 'sencha', 'hojicha'])).toEqual([]);
+  });
+
+  it('OR applies the 20-match cap across the union, not per pattern', () => {
+    const dense = Array.from({ length: 50 }, (_, i) => `line ${i} coffee`).join('\n');
+    // Both patterns hit every line, but cap is 20 across the union.
+    const matches = grepLines(dense, ['coffee', 'line']);
+    expect(matches).toHaveLength(20);
+  });
+
+  it('OR with empty array returns empty matches (defensive — schema also rejects)', () => {
+    expect(grepLines(sample, [])).toEqual([]);
+  });
 });
 
 import { makeGrepDoc } from '../src/tools/grep-doc';
@@ -64,9 +93,15 @@ describe('makeGrepDoc tool description', () => {
     expect(t.description).toMatch(/short distinctive substrings/i);
   });
 
-  it('documents empty-match handling', () => {
+  it('documents empty-match handling and refusal behavior', () => {
     const t = makeGrepDoc('any doc text');
-    expect(t.description).toMatch(/retry at most once/i);
-    expect(t.description!.toLowerCase()).toContain('not in the document');
+    expect(t.description!.toLowerCase()).toContain('empty results');
+    expect(t.description!.toLowerCase()).toContain('not covered');
+  });
+
+  it('documents the OR/array form for synonym exploration (ucs-0f3)', () => {
+    const t = makeGrepDoc('any doc text');
+    expect(t.description!.toLowerCase()).toMatch(/array of strings/);
+    expect(t.description!.toLowerCase()).toContain('synonyms');
   });
 });
