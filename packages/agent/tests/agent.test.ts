@@ -31,9 +31,9 @@ describe('SYSTEM_PROMPT', () => {
     expect(SYSTEM_PROMPT.toLowerCase()).toContain('no markdown');
   });
 
-  it('budgets tool calls and reserves one for the final answer', () => {
-    expect(SYSTEM_PROMPT).toMatch(/at most 8 tool calls/i);
-    expect(SYSTEM_PROMPT.toLowerCase()).toContain('never end a turn without text');
+  it('instructs the model to call finalize at the end of every turn', () => {
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('finalize');
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('end every turn');
   });
 
   it('forbids empty answers and offers a graceful no-answer phrasing', () => {
@@ -49,6 +49,13 @@ describe('SYSTEM_PROMPT', () => {
 });
 
 describe('streamChat', () => {
+  const messages: UIMessage[] = [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }];
+  const document: Document = {
+    text: 'hello world',
+    title: 'doc',
+    sourceUrl: 'https://example.com/doc'
+  };
+
   beforeEach(() => {
     vi.mocked(streamText).mockClear();
     vi.mocked(stepCountIs).mockClear();
@@ -64,33 +71,31 @@ describe('streamChat', () => {
   });
 
   it('passes temperature: 0 to streamText for grounded QA reproducibility', async () => {
-    const messages: UIMessage[] = [
-      { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }
-    ];
-    const document: Document = {
-      text: 'hello world',
-      title: 'doc',
-      sourceUrl: 'https://example.com/doc'
-    };
-
     await streamChat(messages, document);
 
     expect(vi.mocked(streamText)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(streamText).mock.calls[0]![0]!.temperature).toBe(0);
   });
 
-  it('passes stopWhen: stepCountIs(8) to give the model headroom on tool-heavy questions', async () => {
-    const messages: UIMessage[] = [
-      { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }
-    ];
-    const document: Document = {
-      text: 'hello world',
-      title: 'doc',
-      sourceUrl: 'https://example.com/doc'
-    };
-
+  it('registers both grep_doc and finalize tools', async () => {
     await streamChat(messages, document);
 
-    expect(vi.mocked(stepCountIs)).toHaveBeenCalledWith(8);
+    const tools = vi.mocked(streamText).mock.calls[0]![0]!.tools;
+    expect(tools).toBeDefined();
+    expect(Object.keys(tools!).sort()).toEqual(['finalize', 'grep_doc']);
+  });
+
+  it('uses an array stopWhen of length 2 (step budget + hasToolCall(finalize))', async () => {
+    await streamChat(messages, document);
+
+    const { stopWhen } = vi.mocked(streamText).mock.calls[0]![0]!;
+    expect(Array.isArray(stopWhen)).toBe(true);
+    expect(stopWhen as unknown[]).toHaveLength(2);
+  });
+
+  it('bumps the step budget to 10 so finalize counts within the loop', async () => {
+    await streamChat(messages, document);
+
+    expect(vi.mocked(stepCountIs)).toHaveBeenCalledWith(10);
   });
 });

@@ -6,17 +6,19 @@
  *
  * Structure (per Anthropic Prompting 101 — repeat critical constraints):
  * 1. Identity
- * 2. Budget rule (top)
- * 3. Never-empty rule
- * 4. Untrusted-data warning
- * 5. Tool usage guidance
- * 6. Strict citation rule
- * 7. No-markdown rule
- * 8. Budget rule (repeated at bottom)
+ * 2. Never-empty rule
+ * 3. Untrusted-data warning
+ * 4. Tool usage guidance (grep_doc)
+ * 5. Strict citation rule
+ * 6. No-markdown rule
+ * 7. Finalize directive (turn-end requirement, repeated at bottom)
+ *
+ * The previous "at most 8 tool calls" budget rule was removed in T5: the
+ * `hasToolCall('finalize')` stop condition replaces a hardcoded number,
+ * so the prompt now references the `finalize` tool as the turn-end
+ * mechanism instead.
  */
 export const SYSTEM_PROMPT = `You answer questions about a document the user has loaded.
-
-You have at most 8 tool calls per turn. Reserve at least one step for your final answer — never end a turn without text.
 
 Always produce a final answer. If grep_doc returns no useful matches after two attempts on related queries, say so honestly — "I couldn't find this in the document" is a valid answer.
 
@@ -28,4 +30,4 @@ Cite line numbers exactly as returned by grep_doc in the form Lxx (e.g., L142, L
 
 Keep answers concise. Assume plain-text rendering — no markdown formatting.
 
-Remember: you have at most 8 tool calls per turn, and you must always end with a final text answer — never spend your entire budget on tool calls.`;
+End every turn by calling the \`finalize\` tool with your answer + citations. Do not produce free-form text outside \`finalize\`. The \`finalize\` tool is REQUIRED to end your turn — without it, your turn fails silently.`;

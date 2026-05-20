@@ -78,6 +78,28 @@
     chatInput = '';
   }
 
+  /**
+   * Returns true when the assistant message already contains the
+   * `finalize` tool call (in any state). Used to suppress the
+   * "Thinking…" placeholder once the model has begun streaming its
+   * final answer.
+   */
+  function hasFinalize(parts: ReadonlyArray<{ type: string }>): boolean {
+    return parts.some((p) => p.type === 'tool-finalize');
+  }
+
+  /**
+   * True when the user has submitted a question but no assistant
+   * message has been appended yet. The Chat client transitions
+   * `status` to `submitted` synchronously inside `sendMessage`, but
+   * the assistant message only appears once the SSE stream opens.
+   * Without this guard, the UI sits silent in that gap.
+   */
+  let awaitingAssistant = $derived(
+    chat.status === 'submitted' &&
+      (chat.messages.length === 0 || chat.messages[chat.messages.length - 1]!.role === 'user')
+  );
+
   function humanizeError(err: ExtractError): string {
     switch (err.kind) {
       case 'FETCH_TIMEOUT':
@@ -145,15 +167,45 @@
           {#each message.parts as part, i (i)}
             {#if part.type === 'text'}
               <p class="text">{part.text}</p>
-            {:else if part.type?.startsWith('tool-')}
+            {:else if part.type === 'tool-finalize'}
+              {@const input = part.input as { answer?: string; citations?: string[] } | undefined}
+              {#if part.state === 'input-available' || part.state === 'output-available'}
+                <p class="text">{input?.answer ?? ''}</p>
+                {#if input?.citations && input.citations.length > 0}
+                  <p class="citations">
+                    Citations: {input.citations.join(', ')}
+                  </p>
+                {/if}
+              {:else if part.state === 'input-streaming'}
+                {#if input?.answer}
+                  <p class="text streaming">{input.answer}</p>
+                {:else}
+                  <p class="text streaming muted">Thinking…</p>
+                {/if}
+              {/if}
+            {:else if part.type === 'tool-grep_doc'}
+              <details class="tool">
+                <summary>searched the document ({part.state})</summary>
+                <pre>{JSON.stringify(part, null, 2)}</pre>
+              </details>
+            {:else if part.type?.startsWith('tool-') || part.type === 'dynamic-tool'}
               <details class="tool">
                 <summary>tool call: {part.type}</summary>
                 <pre>{JSON.stringify(part, null, 2)}</pre>
               </details>
             {/if}
           {/each}
+          {#if message.role === 'assistant' && !hasFinalize(message.parts) && (chat.status === 'submitted' || chat.status === 'streaming')}
+            <p class="text muted">Thinking…</p>
+          {/if}
         </li>
       {/each}
+      {#if awaitingAssistant}
+        <li class="message message--assistant">
+          <span class="role">assistant</span>
+          <p class="text muted">Thinking…</p>
+        </li>
+      {/if}
     </ol>
 
     <form onsubmit={sendChat} class="composer">
@@ -223,6 +275,19 @@
   .text {
     margin: 0;
     white-space: pre-wrap;
+  }
+  .text.streaming {
+    opacity: 0.85;
+  }
+  .text.muted,
+  .muted {
+    color: #888;
+    font-style: italic;
+  }
+  .citations {
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+    color: #555;
   }
   .tool {
     margin-top: 0.5rem;
