@@ -1,0 +1,59 @@
+/**
+ * tokens.css — Cinematic Memex HUD design tokens.
+ *
+ * Single source of truth for palette, typography, easing, and duration.
+ * Values come from docs/specs/2026-05-20-cinematic-memex-hud.md
+ * (§2.1 palette, §2.2 typography, §3.1 easing, §3.2 duration).
+ *
+ * Phase 1 ships these tokens and the static atmosphere layers; motion
+ * choreography (Phase 2) consumes the same tokens — no new curves or
+ * durations should be introduced without an ADR (see spec §3.1).
+ */
+
+:root {
+  /* ── §2.1 Palette ─────────────────────────────────────────────────── */
+
+  /* Ink scale — body backdrop, deepest field to highlight. */
+  --ink-void: #0a0a0b;
+  --ink-base: #131312;
+  --ink-mid: #1c1e22;
+  --ink-rise: #262c28;
+
+  /* Bone — primary, secondary, and hairline foreground tones. */
+  --bone: #e8e8e6;
+  --bone-dim: rgba(232, 232, 230, 0.55);
+  --hair: rgba(232, 232, 230, 0.12);
+
+  /* Green accent pair — reserved for interactive / status / phosphor. */
+  --green-acid: #bee26e;
+  --green-deep: #33524d;
+
+  /* Secondary tints — glow-pad accents, citation footers. */
+  --teal-glacial: rgba(91, 219, 198, 0.65);
+  --seafoam-soft: rgba(180, 255, 222, 0.5);
+
+  /* Rationed warm — error states only. */
+  --amber-alarm: #d4a017;
+
+  /* ── §2.2 Typography ──────────────────────────────────────────────── */
+
+  /* Display: wide industrial (Protrakt is the licensed first choice; */
+  /* Space Grotesk is the fontsource fallback shipped in Phase 1).    */
+  --font-display: 'Protrakt', 'Space Grotesk', system-ui;
+  --font-body: 'Manrope', system-ui;
+
+  /* ── §3.1 Easing ──────────────────────────────────────────────────── */
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-soft: cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-linear: linear;
+
+  /* ── §3.2 Duration ────────────────────────────────────────────────── */
+
+  --dur-tick: 120ms;
+  --dur-quick: 200ms;
+  --dur-enter: 500ms;
+  --dur-reveal: 800ms;
+  --dur-cinema: 1600ms;
+  --dur-ambient: 8000ms;
+}
