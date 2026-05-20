@@ -107,24 +107,18 @@
   }
 
   /**
-   * Extract the query string from a grep_doc `input` payload. The
-   * tool schema (see `packages/agent/src/tools/grep-doc.ts`) accepts
-   * `pattern: string | string[]` — the array form is the OR-union
-   * synonym-exploration shape (ucs-0f3). We render a string verbatim
-   * and join arrays with ` | ` to mirror the OR semantics. Fall back
-   * to empty string if the model hasn't streamed the pattern yet.
-   *
-   * Schema-drift history: an earlier version read `input.query`,
-   * which always undefined and silently rendered `q: ""`. ucs-aoo
-   * tracked the fix.
+   * Extract the pattern string from a grep_doc `input` payload. The
+   * input shape is `{ pattern: string }` (renamed from `query` in
+   * ucs-8nl / PR #120 to advertise pipe-separated OR-union support);
+   * fall back to empty string if the model hasn't streamed the pattern
+   * yet. The prop on `GrepDocScan` is still named `query` because that
+   * matches the sys-voice label (`q: "..."`) in the scan card.
    */
   function queryFor(input: unknown): string {
     if (!input || typeof input !== 'object') return '';
     const i = input as Record<string, unknown>;
     const p = i['pattern'];
-    if (typeof p === 'string') return p;
-    if (Array.isArray(p)) return p.filter((s): s is string => typeof s === 'string').join(' | ');
-    return '';
+    return typeof p === 'string' ? p : '';
   }
 
   /**

@@ -131,10 +131,14 @@ describe('MessageStream', () => {
     expect(container.querySelector('.status-pill')).not.toBeNull();
   });
 
-  it('renders the grep_doc query verbatim from input.pattern (string form)', () => {
-    // Regression: ucs-aoo — an earlier mapper read `input.query` and
-    // silently rendered `q: ""`. The tool schema is `pattern: string |
-    // string[]`, so the mapper must read `pattern`.
+  /**
+   * ucs-m97 regression. The grep_doc tool's input shape is
+   * `{ pattern: string }` (see packages/agent/src/tools/grep-doc.ts —
+   * renamed from `query` in ucs-8nl / PR #120). MessageStream's
+   * queryFor must read `input.pattern`, or the GREP_DOC scan card
+   * renders `q: ""` for every search.
+   */
+  it('renders the actual pattern inside the GREP_DOC card (ucs-m97)', () => {
     const { container } = render(MessageStreamHost, {
       props: {
         chat: {
@@ -144,7 +148,7 @@ describe('MessageStream', () => {
                 type: 'tool-grep_doc',
                 toolCallId: 'c1',
                 state: 'input-available',
-                input: { pattern: 'status code' }
+                input: { pattern: 'hypertext' }
               }
             ])
           ]
@@ -152,12 +156,11 @@ describe('MessageStream', () => {
         awaitingAssistant: false
       }
     });
-    expect(container.textContent).toContain('"status code"');
+    const queryText = container.querySelector('.grep-doc__query-text');
+    expect(queryText?.textContent).toBe('"hypertext"');
   });
 
-  it('renders the grep_doc query as a `|`-joined string for the array (OR-union) form', () => {
-    // Tool schema accepts `pattern: string[]` for synonym exploration
-    // (ucs-0f3). The OR semantics are visualized as ` | `-joined.
+  it('renders pipe-separated alternatives verbatim (ucs-m97)', () => {
     const { container } = render(MessageStreamHost, {
       props: {
         chat: {
@@ -167,7 +170,7 @@ describe('MessageStream', () => {
                 type: 'tool-grep_doc',
                 toolCallId: 'c1',
                 state: 'input-available',
-                input: { pattern: ['error', 'exception', 'fault'] }
+                input: { pattern: 'error|exception|fault' }
               }
             ])
           ]
@@ -175,37 +178,8 @@ describe('MessageStream', () => {
         awaitingAssistant: false
       }
     });
-    expect(container.textContent).toContain('"error | exception | fault"');
-  });
-
-  it('renders the grep_doc hit count from output.matches.length on completion', () => {
-    // Regression: ucs-ozi — an earlier mapper read `output.hits` and
-    // silently rendered `0 HITS` for every completed scan. Tool returns
-    // `{ matches: GrepMatch[] }` (packages/agent/src/tools/grep-doc.ts).
-    const { container } = render(MessageStreamHost, {
-      props: {
-        chat: {
-          messages: [
-            msg('m1', 'assistant', [
-              {
-                type: 'tool-grep_doc',
-                toolCallId: 'c1',
-                state: 'output-available',
-                input: { pattern: 'tea' },
-                output: {
-                  matches: [
-                    { line: 1, text: 'a', before: [], after: [] },
-                    { line: 5, text: 'b', before: [], after: [] }
-                  ]
-                }
-              }
-            ])
-          ]
-        },
-        awaitingAssistant: false
-      }
-    });
-    expect(container.querySelector('.status-pill')!.textContent?.trim()).toBe('[ 2 HITS ]');
+    const queryText = container.querySelector('.grep-doc__query-text');
+    expect(queryText?.textContent).toBe('"error|exception|fault"');
   });
 
   it('routes tool-finalize parts to FinalizeScan', () => {
@@ -283,7 +257,7 @@ describe('MessageStream', () => {
                 toolCallId: 'c1',
                 state: 'output-available',
                 input: { pattern: 'tea' },
-                output: { matches: [{ line: 1, text: 'tea', before: [], after: [] }] }
+                output: { hits: 2 }
               },
               { type: 'text', text: 'tea is hot.' }
             ])
