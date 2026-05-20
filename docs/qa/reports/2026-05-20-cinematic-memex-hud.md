@@ -500,3 +500,41 @@ wrong moment). `bd dep add ucs-s9c ucs-6j9` recorded the block.
 the bar — IdleState and the early scan cards now work — but the same
 class of reactivity defect persists on later mid-stream cards. Phase 2
 close-out blocked on `ucs-6j9`.
+
+---
+
+## Final pass — ucs-6j9 fix verified
+
+**Fix:** `e224c2e fix(ucs-6j9): scrambleIn overwrite + stable part keys unfreeze mid-stream pills`
+
+**Cause:** Combination of (1) GSAP `scrambleIn` lacking `overwrite: 'auto'` — overlapping 280ms tweens raced, older tween's final write of stale text landed AFTER the newer tween settled, freezing the pill; (2) defensive co-fix: `{#each message.parts as part, i (i)}` index keying replaced with stable `partKey(messageId, part, i)` (`toolCallId` when present, composite fallback) so Svelte doesn't reuse DOM nodes across logical part identities.
+
+**Manual verification (live dev server, against rfc2324, 2 chat turns):**
+- Turn 1 (5 cards): OUTLINE `[ NO_SECTIONS ]`, GREP_DOC `[ 14 HITS ]`, 3× READ_LINES reaching `[ Lx-Ly ]`, FINALIZE `[ COMPLETE ]` — all terminal.
+- Turn 2 (13 cards): 12× GREP_DOC each reaching `[ N HITS ]` (3, 20, 14, 9, 4, 1, 2, 3, 3, 0, 5, 5), FINALIZE `[ COMPLETE ]` — all terminal.
+- Specifically the previously-frozen positions (GREP_DOC cards 7–11 + the FINALIZE "Card 12" from the re-re-run) all reach terminal states.
+
+**Tests:**
+- `MessageStream.streaming-host.svelte` — new reactive `$state`-backed host with mutate handle.
+- `MessageStream.test.ts` — new "mid-stream mutation (ucs-6j9 regression)" group: 12-card grep_doc cycle + finalize after tools.
+- `scrambleIn.test.ts` — new contract asserts every scheduled tween requests `overwrite: 'auto'` (fails when the fix is reverted, verified).
+
+**472/472 tests pass** at this stage. CI all-green.
+
+### Phase 2 close-out
+
+| Case | Final status |
+|---|---|
+| 1. 5 states × 3 viewports | PASS |
+| 2. URL submit → cinematic transition | PASS |
+| 3. Differentiated scans (grep_doc / finalize) | PASS (after ucs-aoo + ucs-ozi) |
+| 4a. Failure (extract error) | PASS |
+| 4b. Stream abort | DEFERRED — no STOP affordance in UI, harness-blocked. Surfaced for follow-up. |
+| 5. Reduced-motion strict fallback | PASS |
+| 6. Mobile viewport | PASS |
+| 7. No console errors | PASS (after ucs-8n1) |
+| 8. Lighthouse | DEFERRED — MCP doesn't expose Lighthouse panel. Manual smoke recommended pre-prod. |
+
+Cleanly defect-resolved: ucs-aoo, ucs-ozi, ucs-8n1, ucs-eem, ucs-6j9. Out-of-scope filed: ucs-9vn (mobile PNG, P3), ucs-jno (closed; HudPanel alarm corners), AI_MissingToolResultsError multi-turn (P3, separately filed).
+
+Phase 2 close-out CLEAN. ucs-s9c → `in_review`.
