@@ -164,26 +164,25 @@
       against the spec text. Do not paraphrase or reformat.
     -->
     <p class="drawer__threat-model">
-      Your key is stored in this browser tab only — not on disk, not on our servers. Each chat
-      turn sends your key over HTTPS to our server, which uses it once to call Anthropic and
-      then discards it. Anything that runs in this tab (browser extensions, scripts) can read
-      your key while the tab is open. We recommend setting a per-key spend cap in your
-      Anthropic Console before pasting it here.
+      Your key is stored in this browser tab only — not on disk, not on our servers. Each chat turn
+      sends your key over HTTPS to our server, which uses it once to call Anthropic and then
+      discards it. Anything that runs in this tab (browser extensions, scripts) can read your key
+      while the tab is open. We recommend setting a per-key spend cap in your Anthropic Console
+      before pasting it here.
     </p>
   </form>
 {:else}
   <div class="drawer drawer--saved">
-    <div class="drawer__chip" data-testid="key-chip" aria-label="Saved Anthropic key, last 4 characters">
+    <div
+      class="drawer__chip"
+      data-testid="key-chip"
+      aria-label="Saved Anthropic key, last 4 characters"
+    >
       sk-ant-•••••••••••{lastFour}
     </div>
 
     <div class="drawer__actions">
-      <button
-        type="button"
-        class="drawer__action"
-        data-testid="replace"
-        onclick={handleReplace}
-      >
+      <button type="button" class="drawer__action" data-testid="replace" onclick={handleReplace}>
         Replace
       </button>
 
@@ -197,9 +196,7 @@
           Forget key
         </button>
       {:else}
-        <span class="drawer__confirm-copy">
-          You'll need to paste the key again to chat.
-        </span>
+        <span class="drawer__confirm-copy"> You'll need to paste the key again to chat. </span>
         <button
           type="button"
           class="drawer__action drawer__action--danger"

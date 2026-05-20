@@ -165,11 +165,17 @@ At any given moment the page runs:
 Foreground motion is *additive* over this layer and lasts ≤ `--dur-cinema`.
 Most of the page is at rest while one cluster performs; ambient never stops.
 
-### 3.5 Reduced-motion fallback — **TBD**
+### 3.5 Reduced-motion fallback
 
-The system needs a `prefers-reduced-motion` fallback. The exact behavior
-(strict / soft / signature-moments-only) is a follow-up decision
-**before Phase 2 ships**. Listed in §7 Deferred Decisions.
+**Strict fallback** per [ADR 0009](../adr/0009-prefers-reduced-motion.md).
+Every Phase 2 motion action consults `prefers-reduced-motion` at module
+evaluation. When set: ambient motion disabled (atmosphere layers stay
+rendered at resting state), showpiece moments collapse to instant state
+changes or simple opacity fades, the cinematic `extracting → ready`
+transition becomes an instant state swap. Theme, palette, typography,
+HUD chrome, and instrumentation vocabulary are unaffected — only motion
+drops out. The single contract enforced at module-evaluation time keeps
+the implementation discipline tight.
 
 ---
 
@@ -424,14 +430,15 @@ the components above.
 
 ### Deferred decisions
 
-- **`prefers-reduced-motion` strategy** (TBD before Phase 2 ships).
-  Three options on the table: strict fallback (kill ambient + showpieces),
-  soft fallback (keep one signature moment, kill ambient), no fallback
-  (override OS setting). The reference vocabulary this design draws
-  from ships no fallback — we will *not* inherit that posture.
 - **Cinematic exit-transition frame-by-frame storyboard**
   (`extracting → ready`). Vocabulary fixed in §4.2; pixel-exact timing
   is impl-team scene direction during Phase 2.
+
+### Resolved decisions
+
+- **`prefers-reduced-motion` strategy** — strict fallback per
+  [ADR 0009](../adr/0009-prefers-reduced-motion.md). See §3.5 for the
+  implementation contract.
 
 ---
 
