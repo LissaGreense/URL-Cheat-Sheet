@@ -27,7 +27,15 @@ afterEach(() => {
   cleanup();
 });
 
-/** Minimal message factory — id + role + parts. */
+/**
+ * Minimal message factory — id + role + parts.
+ *
+ * The return type matches the test-host's `MockMessage` shape (which
+ * uses `ReadonlyArray<Record<string, unknown>>` so callers can pass
+ * tuple-built arrays without worrying about variance). The test-host
+ * casts to the wider Chat-derived type at the forward boundary — see
+ * `MessageStream.test-host.svelte` for the rationale.
+ */
 function msg(
   id: string,
   role: 'user' | 'assistant',

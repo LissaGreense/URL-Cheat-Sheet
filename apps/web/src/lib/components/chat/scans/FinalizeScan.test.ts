@@ -53,16 +53,20 @@ function fakePart(input: {
   citations?: string[];
   errorText?: string;
 }): FinalizePart {
+  // Assembled via bracket access — `noPropertyAccessFromIndexSignature: true`
+  // (set in the repo's strict baseline) requires bracket form for any
+  // property that comes from an index signature, which is exactly what
+  // `Record<string, unknown>` is.
   const part: Record<string, unknown> = {
     type: 'tool-finalize',
     toolCallId: 'call_1',
     state: input.state
   };
   if (input.state === 'output-error') {
-    part.input = input.answer ? { answer: input.answer } : undefined;
-    part.errorText = input.errorText ?? 'tool failed';
+    part['input'] = input.answer ? { answer: input.answer } : undefined;
+    part['errorText'] = input.errorText ?? 'tool failed';
   } else {
-    part.input = {
+    part['input'] = {
       answer: input.answer,
       citations: input.citations ?? []
     };
