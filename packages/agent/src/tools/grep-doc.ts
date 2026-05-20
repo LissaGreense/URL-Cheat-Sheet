@@ -62,13 +62,10 @@ export function grepLines(text: string, pattern: string | readonly string[]): Gr
 export function makeGrepDoc(documentText: string) {
   return tool({
     description:
-      'Case-insensitive substring search over document lines, with ±2 lines of context. Returns matching lines labeled Lxx. `pattern` can be a single string OR an array of strings — with an array, a line matches if it contains ANY of the patterns (logical OR). PREFER the array form when exploring synonyms — e.g. `["matcha","sencha","hojicha"]` in one call beats three sequential calls. Use short distinctive substrings, not full sentences. Empty results mean none of the terms appear in the document; if your initial query and one synonym set both return empty, the topic is not covered — answer honestly.',
+      'Case-insensitive substring search over document lines, with ±2 lines of context. Returns matching lines labeled Lxx. `pattern` can be a single string OR an array of strings — with an array, a line matches if it contains ANY of the patterns (logical OR). PREFER the array form when exploring synonyms — e.g. `["error","exception","fault"]` in one call beats three sequential calls. Use short distinctive substrings, not full sentences. Empty results mean none of the terms appear in the document; if your initial query and one synonym set both return empty, the topic is not covered — answer honestly.',
     inputSchema: z.strictObject({
       pattern: z
-        .union([
-          z.string().min(1),
-          z.array(z.string().min(1)).min(1).max(MAX_PATTERNS)
-        ])
+        .union([z.string().min(1), z.array(z.string().min(1)).min(1).max(MAX_PATTERNS)])
         .describe(
           'Case-insensitive substring(s) to search. String for a single term, or an array of up to 10 terms for OR-union exploration of synonyms.'
         )
