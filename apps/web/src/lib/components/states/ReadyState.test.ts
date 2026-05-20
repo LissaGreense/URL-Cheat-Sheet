@@ -1,0 +1,167 @@
+/**
+ * @fileoverview Contract tests for ReadyState — the cinematic chat
+ * layout (spec §4.5, plan Task 5).
+ *
+ * Composition under test:
+ *   - memory chip (// MEMORY_ACTIVE + document title + > change link)
+ *   - top-left // MEMORY_ACTIVE sys-voice header
+ *   - bottom-right 001 SESSION corner stamp
+ *   - MessageStream rendering thread messages
+ *   - Composer bound to chatInput
+ *   - greeting auto-injected when chat.messages is empty
+ *   - onReset fires when the > change link is clicked
+ */
+
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { render, cleanup, fireEvent } from '@testing-library/svelte';
+import ReadyStateHost from './ReadyState.test-host.svelte';
+
+const SAMPLE_DOC = {
+  title: 'How to brew tea',
+  sourceUrl: 'https://example.com/tea',
+  text: 'Steep for three minutes.',
+  headings: []
+};
+
+afterEach(() => {
+  cleanup();
+});
+
+describe('ReadyState', () => {
+  it('renders the document title in the memory chip', () => {
+    const { container } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: { messages: [] },
+        chatInput: '',
+        onSendChat: () => {},
+        onReset: () => {}
+      }
+    });
+    expect(container.textContent).toContain('How to brew tea');
+    // memory chip uses sys-voice MEMORY_ACTIVE label
+    expect(container.textContent).toContain('MEMORY_ACTIVE');
+  });
+
+  it('renders the // MEMORY_ACTIVE sys-voice header', () => {
+    const { container } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: { messages: [] },
+        chatInput: '',
+        onSendChat: () => {},
+        onReset: () => {}
+      }
+    });
+    // header prefix
+    expect(container.textContent).toContain('//');
+    expect(container.textContent).toContain('MEMORY_ACTIVE');
+  });
+
+  it('renders the 001 SESSION corner stamp', () => {
+    const { container } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: { messages: [] },
+        chatInput: '',
+        onSendChat: () => {},
+        onReset: () => {}
+      }
+    });
+    const stamp = container.querySelector('.corner-stamp');
+    expect(stamp).not.toBeNull();
+    expect(stamp!.textContent).toContain('001 SESSION');
+  });
+
+  it('injects the greeting when chat.messages is empty', () => {
+    const { container } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: { messages: [] },
+        chatInput: '',
+        onSendChat: () => {},
+        onReset: () => {}
+      }
+    });
+    expect(container.textContent).toContain('URL has been loaded to your memory');
+    expect(container.textContent).toContain('Ask questions to get knowledge access');
+  });
+
+  it('suppresses the greeting once messages exist', () => {
+    const { container } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: {
+          messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }]
+        },
+        chatInput: '',
+        onSendChat: () => {},
+        onReset: () => {}
+      }
+    });
+    expect(container.textContent).not.toContain('URL has been loaded to your memory');
+  });
+
+  it('fires onReset when the > change link is clicked', async () => {
+    const onReset = vi.fn();
+    const { container } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: { messages: [] },
+        chatInput: '',
+        onSendChat: () => {},
+        onReset
+      }
+    });
+    const link = container.querySelector('[data-testid="ready-reset"]');
+    expect(link).not.toBeNull();
+    await fireEvent.click(link!);
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the composer (input + send button)', () => {
+    const { container } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: { messages: [] },
+        chatInput: '',
+        onSendChat: () => {},
+        onReset: () => {}
+      }
+    });
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.placeholder).toBe('Ask about this page...');
+    const submit = container.querySelector('button[type="submit"]');
+    expect(submit!.textContent).toContain('SEND');
+  });
+
+  it('binds chatInput into the composer input', () => {
+    const { container } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: { messages: [] },
+        chatInput: 'pre-filled',
+        onSendChat: () => {},
+        onReset: () => {}
+      }
+    });
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input.value).toBe('pre-filled');
+  });
+
+  it('renders MessageStream with the chat messages', () => {
+    const { container } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: {
+          messages: [{ id: 'm1', role: 'user', parts: [{ type: 'text', text: 'what is tea?' }] }]
+        },
+        chatInput: '',
+        onSendChat: () => {},
+        onReset: () => {}
+      }
+    });
+    expect(container.textContent).toContain('what is tea?');
+  });
+});
