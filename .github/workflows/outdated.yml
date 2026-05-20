@@ -20,7 +20,6 @@ jobs:
           if [ -s outdated.json ] && [ "$(jq 'length' outdated.json)" -gt 0 ]; then
             echo "Outdated deps detected — see outdated.json artifact."
             cat outdated.json
-            # In future: file a bd chore issue via gh CLI + bd-recipes.sh
             exit 0
           fi
       - uses: actions/upload-artifact@v4

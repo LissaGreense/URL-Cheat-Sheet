@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GET } from '../src/routes/api/health/+server.ts';
+import { GET } from '../src/routes/api/health/+server';
 
 describe('GET /api/health', () => {
   it('responds 200 with ok status and a version', async () => {

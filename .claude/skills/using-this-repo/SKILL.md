@@ -30,16 +30,16 @@ completes (`pr-ready`), and merges after gates clear (`pr-merge`). See
 the [`opening-pr-orchestrator`](../opening-pr-orchestrator/SKILL.md)
 skill for the actual recipes.
 
-Direct pushes to `main` are blocked by the version-controlled
+Direct pushes to `main` are blocked by GitHub branch protection
+server-side (required checks `typecheck`/`lint`/`test`/`build`,
+linear history, no force-push, no deletions). The version-controlled
 **local pre-push hook** (`scripts/git-hooks/pre-push`, wired via
-`scripts/setup-git-hooks.sh`). GitHub branch protection is unavailable
-on the free-tier private setup, so server-side enforcement is opt-in
-once the repo upgrades or goes public — see ADR 0005's 2026-05-18 and
-2026-05-19 addendums. If you're not going through the full pipeline
-(e.g., a one-shot doc fix), branch as `chore/<slug>` instead. For
-merging chore PRs without the orchestrator, use
-`bash scripts/safe-merge.sh <pr> [--wait]` so red CI can't slip
-through (ucs-0z5).
+`scripts/setup-git-hooks.sh`) is defense-in-depth — it fails before
+the round-trip. See ADR 0005's 2026-05-20 addendum for the current
+state. If you're not going through the full pipeline (e.g., a
+one-shot doc fix), branch as `chore/<slug>` and merge with
+`gh pr merge --squash --delete-branch` once CI is green — server-side
+required checks gate red merges.
 
 ## Pipeline stages → skills
 

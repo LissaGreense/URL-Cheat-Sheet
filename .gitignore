@@ -27,6 +27,9 @@ coverage/
 !.vscode/extensions.json
 .idea/
 
+# Local worktrees (default location for superpowers:using-git-worktrees)
+.claude/worktrees/
+
 # Promptfoo
 .promptfoo/
 promptfoo-results.json

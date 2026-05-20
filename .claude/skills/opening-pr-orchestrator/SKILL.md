@@ -251,9 +251,9 @@ Quick reference:
    prior step failed BEFORE the action completed — bd state is the
    authority for what's "done." Once an action has succeeded end-to-end,
    subsequent runs will error rather than corrupt state.
-4. **Do not use `gh pr merge --auto`** for chore PRs you open outside
-   the orchestrator pipeline. Auto-merge fires whenever the PR becomes
-   mergeable in GitHub's eyes, regardless of CI conclusion (no GH
-   required checks per ADR 0005). Use
-   `bash scripts/safe-merge.sh <pr> [--wait]` — it runs the same
-   `statusCheckRollup` preflight as Action 3 and refuses on red CI.
+4. For chore PRs you open outside the orchestrator pipeline,
+   `gh pr merge --squash --delete-branch` is fine — GitHub's
+   server-side required checks (`typecheck`/`lint`/`test`/`build`)
+   reject merges on red CI regardless of merge trigger. The
+   orchestrator keeps its own `statusCheckRollup` preflight in
+   Action 3 as defense-in-depth.
