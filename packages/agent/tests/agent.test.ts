@@ -30,6 +30,22 @@ describe('SYSTEM_PROMPT', () => {
     expect(SYSTEM_PROMPT.toLowerCase()).toContain('line number');
     expect(SYSTEM_PROMPT.toLowerCase()).toContain('no markdown');
   });
+
+  it('budgets tool calls and reserves one for the final answer', () => {
+    expect(SYSTEM_PROMPT).toMatch(/at most 8 tool calls/i);
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('never end a turn without text');
+  });
+
+  it('forbids empty answers and offers a graceful no-answer phrasing', () => {
+    expect(SYSTEM_PROMPT).toMatch(/always produce a final answer/i);
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain("i couldn't find this in the document");
+  });
+
+  it('requires exact Lxx citation format with no estimation', () => {
+    expect(SYSTEM_PROMPT).toMatch(/exactly as returned by grep_doc/i);
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('do not estimate or round');
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('uncited claims are forbidden');
+  });
 });
 
 describe('streamChat', () => {
