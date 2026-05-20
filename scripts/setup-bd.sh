@@ -40,3 +40,16 @@ fi
 echo
 echo "Effective statuses:"
 bd statuses 2>&1 | sed 's/^/  /'
+
+# Provision the merge slot consumed by opening-pr-orchestrator's pr-merge
+# action. Lets concurrent orchestrators serialize their merge phase so two
+# pipelines don't race on the post-merge `git pull --ff-only` window.
+# `bd merge-slot check` returns exit=0 in both "found" and "not found"
+# cases, so we grep the message instead of relying on the exit code.
+echo
+if bd merge-slot check 2>&1 | grep -q "not found"; then
+  bd merge-slot create
+  echo "✓ Created bd merge slot"
+else
+  echo "✓ bd merge slot already provisioned"
+fi

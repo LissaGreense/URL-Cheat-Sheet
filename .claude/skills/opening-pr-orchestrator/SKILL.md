@@ -86,9 +86,35 @@ required checks (see ADR 0005), so `gh pr checks --required` is always
 empty here. The preflight reads `statusCheckRollup` directly and
 treats `SKIPPED` as acceptable (e.g. `eval-gate` skips on non-agent PRs).
 
+**Concurrency:** when more than one orchestrator may be active, the
+action acquires `bd merge-slot` before the preflight so two pipelines
+can't both pass "gates green" → merge → race on the post-merge `git
+pull` window. The slot is released on every exit path via `trap`. The
+slot itself is provisioned by `scripts/setup-bd.sh` (one-shot per
+clone). If the slot is missing, `bd merge-slot acquire` errors with
+`merge slot not found` — fix by re-running `setup-bd.sh`, not by
+disabling the wrap.
+
 ```bash
 ID="$1"
 PR_URL="$(bd show "$ID" --json | jq -r '.[0].notes' | grep -oE 'https://github.com/[^[:space:]]+/pull/[0-9]+' | head -1)"
+
+# Acquire the merge slot. Polls every 2s; registers as a waiter once for
+# audit visibility (the queue is informational — first poller wins on
+# release). Caps at 10 minutes; a held slot beyond that is almost
+# certainly a crashed orchestrator that didn't release — escalate
+# manually via `bd merge-slot release`.
+bd merge-slot acquire --wait >/dev/null 2>&1 || true   # register intent (queue is informational)
+ATTEMPTS=0
+until bd merge-slot acquire >/dev/null 2>&1; do
+  ATTEMPTS=$((ATTEMPTS + 1))
+  if [ "$ATTEMPTS" -gt 300 ]; then
+    echo "abort: merge slot held >10min — investigate, then 'bd merge-slot release' manually"
+    exit 1
+  fi
+  sleep 2
+done
+trap 'bd merge-slot release >/dev/null 2>&1 || true' EXIT
 
 # Preflight: every condition must hold or we abort.
 #
@@ -138,9 +164,17 @@ SHA="$(git ls-remote origin main | awk '{print $1}')"
 bd update "$ID" --remove-label "gate:pr"
 bd close "$ID" --reason "Merged in $SHA"
 
-# Sync local main. Stash any .beads/issues.jsonl drift from the bd
-# updates above so the fast-forward doesn't refuse; drop the stash so
-# the working tree matches origin/main exactly.
+# Sync local main. Stash any .beads/ drift (issues.jsonl, metadata.json,
+# config.yaml — anything bd may have auto-touched during the close
+# above) so the fast-forward doesn't refuse; drop the stash so the
+# working tree matches origin/main exactly.
+#
+# Stash scope is the whole .beads/ directory rather than just
+# issues.jsonl: with concurrent orchestrators, another pipeline's bd
+# writes can land in metadata.json or config.yaml during this window,
+# and a narrower stash would let those slip through and make
+# `git pull --ff-only` refuse. Runtime files in .beads/ (dolt/, locks,
+# etc.) are gitignored so the stash skips them.
 #
 # We intentionally do NOT re-export .beads/issues.jsonl here. bd's Dolt
 # DB carries the post-close state; the jsonl snapshot trails by one
@@ -148,7 +182,7 @@ bd close "$ID" --reason "Merged in $SHA"
 # would leave the working tree dirty on main after every merge, and
 # that drift then leaked into every subsequent worktree's bootstrap
 # commit. See ADR 0007.
-git stash push -m "wip bd state" .beads/issues.jsonl 2>/dev/null || true
+git stash push -m "wip bd state" .beads/ 2>/dev/null || true
 git pull --ff-only
 git stash drop 2>/dev/null || true
 ```
