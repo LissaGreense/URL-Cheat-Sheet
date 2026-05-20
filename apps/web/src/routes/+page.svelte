@@ -2,6 +2,8 @@
   import { Chat } from '@ai-sdk/svelte';
   import { DefaultChatTransport } from 'ai';
   import type { Document, ExtractResponse, ExtractError } from '@url-cheat-sheet/schemas';
+  import IdleState from '../lib/components/states/IdleState.svelte';
+  import ExtractingState from '../lib/components/states/ExtractingState.svelte';
 
   type State =
     | { kind: 'idle' }
@@ -131,13 +133,9 @@
   <h1>URL Cheat Sheet</h1>
 
   {#if state.kind === 'idle'}
-    <p class="hint">Paste a URL to start chatting about a page.</p>
-    <form onsubmit={loadUrl} class="composer">
-      <input type="url" bind:value={urlInput} placeholder="https://..." aria-label="Page URL" />
-      <button type="submit" disabled={!urlInput.trim()}>Load page</button>
-    </form>
+    <IdleState bind:urlInput onSubmit={loadUrl} />
   {:else if state.kind === 'extracting'}
-    <p class="hint">Loading {state.url}…</p>
+    <ExtractingState url={state.url} />
   {:else if state.kind === 'extract-error'}
     <p class="error">{state.message}</p>
     <button type="button" onclick={reset}>Try a different URL</button>
