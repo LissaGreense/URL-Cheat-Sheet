@@ -65,11 +65,27 @@ pass MUST equal (score >= 0.7).`;
  * a `{pass, score, reason}` JSON object out of the response, and applies the
  * fixed 0.7 threshold.
  *
+ * Empty or whitespace-only `output` short-circuits to a fail verdict without
+ * an API call: there's nothing for the judge to grade groundedness against,
+ * and observed behavior (see ucs-xom test 2: model burned its tool-step
+ * budget without ever producing text) is that the judge happily hallucinates
+ * a grounded reason from the document alone. Treat structurally ungradable
+ * input as fail at the source.
+ *
  * Malformed JSON, missing `score`, or `score` outside `[0, 1]` all collapse
  * to a stable fail-shape with the original response preserved on `raw` for
  * debugging.
  */
 export async function gradeGrounding(input: GradingInput): Promise<Verdict> {
+  if (input.output.trim().length === 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'agent produced empty output (cannot grade groundedness)',
+      raw: ''
+    };
+  }
+
   const model = anthropic(input.judgeModel ?? JUDGE_DEFAULT_MODEL);
   const { text } = await generateText({
     model,

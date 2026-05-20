@@ -101,4 +101,24 @@ describe('gradeGrounding', () => {
       raw
     });
   });
+
+  it('G: empty output — short-circuits to fail without calling the judge', async () => {
+    const verdict = await gradeGrounding({ ...BASE_INPUT, output: '' });
+
+    expect(verdict.pass).toBe(false);
+    expect(verdict.score).toBe(0);
+    expect(verdict.reason).toMatch(/empty/i);
+    expect(verdict.raw).toBe('');
+    expect(vi.mocked(generateText)).not.toHaveBeenCalled();
+  });
+
+  it('H: whitespace-only output — same short-circuit fail as empty', async () => {
+    const verdict = await gradeGrounding({ ...BASE_INPUT, output: '   \n\t  ' });
+
+    expect(verdict.pass).toBe(false);
+    expect(verdict.score).toBe(0);
+    expect(verdict.reason).toMatch(/empty/i);
+    expect(verdict.raw).toBe('');
+    expect(vi.mocked(generateText)).not.toHaveBeenCalled();
+  });
 });
