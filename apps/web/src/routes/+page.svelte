@@ -99,28 +99,6 @@
     chatInput = '';
   }
 
-  /**
-   * Returns true when the assistant message already contains the
-   * `finalize` tool call (in any state). Used to suppress the
-   * "Thinking…" placeholder once the model has begun streaming its
-   * final answer.
-   */
-  function hasFinalize(parts: ReadonlyArray<{ type: string }>): boolean {
-    return parts.some((p) => p.type === 'tool-finalize');
-  }
-
-  /**
-   * True when the user has submitted a question but no assistant
-   * message has been appended yet. The Chat client transitions
-   * `status` to `submitted` synchronously inside `sendMessage`, but
-   * the assistant message only appears once the SSE stream opens.
-   * Without this guard, the UI sits silent in that gap.
-   */
-  let awaitingAssistant = $derived(
-    chat.status === 'submitted' &&
-      (chat.messages.length === 0 || chat.messages[chat.messages.length - 1]!.role === 'user')
-  );
-
   function humanizeError(err: ExtractError): string {
     switch (err.kind) {
       case 'FETCH_TIMEOUT':
