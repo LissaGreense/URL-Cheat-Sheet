@@ -31,6 +31,7 @@ describe('chatRequestSchema', () => {
   });
 
   it('rejects a body missing apiKey', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { apiKey: _omit, ...withoutKey } = VALID_BODY;
     const result = chatRequestSchema.safeParse(withoutKey);
     expect(result.success).toBe(false);
