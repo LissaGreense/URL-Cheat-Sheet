@@ -25,6 +25,9 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
-    globals: false
+    globals: false,
+    // jsdom doesn't ship `matchMedia`; the Phase 2 motion actions need
+    // it (via `prefersReducedMotion`). See `vitest.setup.ts`.
+    setupFiles: ['./vitest.setup.ts']
   }
 });
