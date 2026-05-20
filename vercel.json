@@ -2,8 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "bunVersion": "1.x",
   "installCommand": "bun install --frozen-lockfile",
-  "buildCommand": "bun --filter @url-cheat-sheet/web build",
-  "outputDirectory": "apps/web/.vercel/output",
+  "buildCommand": "bun --filter @url-cheat-sheet/web build && rm -rf .vercel/output && cp -R apps/web/.vercel/output .vercel/output",
+  "outputDirectory": ".vercel/output",
   "framework": "sveltekit",
   "git": {
     "deploymentEnabled": {
