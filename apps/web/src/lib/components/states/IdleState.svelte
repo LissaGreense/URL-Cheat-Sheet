@@ -23,6 +23,7 @@
   import SysLabel from '../hud/SysLabel.svelte';
   import CornerStamp from '../hud/CornerStamp.svelte';
   import { splitLineReveal } from '../../motion/splitLineReveal';
+  import { scrambleIn } from '../../motion/scrambleIn';
 
   /**
    * Props for IdleState.
@@ -51,7 +52,14 @@
 </div>
 
 <div class="idle-state">
-  <h1 class="wordmark">URL_CHEAT_SHEET</h1>
+  <!--
+    Wordmark gets `scrambleIn` (Task 13). Pure text node, no child
+    components — scrambleText safely tweens the textContent without
+    mangling any nested DOM structure. The StatusPill below already
+    has its own `use:scrambleIn` (Task 9), so this + the pill cover
+    "scrambleIn on system labels" from the spec / AC.
+  -->
+  <h1 class="wordmark" use:scrambleIn>URL_CHEAT_SHEET</h1>
 
   <p class="directive" use:splitLineReveal>LOAD URL TO YOUR MEMORY</p>
 

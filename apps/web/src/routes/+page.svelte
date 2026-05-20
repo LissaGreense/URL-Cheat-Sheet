@@ -89,6 +89,7 @@
   import ExtractErrorState from '../lib/components/states/ExtractErrorState.svelte';
   import FlaggedState from '../lib/components/states/FlaggedState.svelte';
   import ReadyState from '../lib/components/states/ReadyState.svelte';
+  import CinematicTransition from '../lib/components/motion/CinematicTransition.svelte';
   import SettingsDrawer from '$lib/components/SettingsDrawer.svelte';
   import { classifyChatError, INLINE_ERROR_COPY } from '$lib/chat-error';
 
@@ -142,6 +143,24 @@
    * unrelated re-render while `chat.error` is still set.
    */
   let lastRoutedErrorMessage: string | undefined = undefined;
+
+  /**
+   * Cinematic-transition handoff state (Task 13, spec §4.2). When the
+   * state machine wants to advance from `extracting` to `ready`, we
+   * stash the pending Document here and hold `pageState` at `extracting`
+   * — the `<CinematicTransition>` overlay then runs the GSAP timeline
+   * and fires `onComplete`, at which point we flip `pageState` to the
+   * pending `ready` and clear this rune.
+   *
+   * Reduced-motion users path through the same handoff, but
+   * `CinematicTransition` calls `onComplete` synchronously on mount —
+   * so the flip happens on the same render tick the overlay appears,
+   * collapsing the cinematic moment to an instant state swap with no
+   * visible animation.
+   *
+   * Anchors at `null` when no transition is in flight (the common case).
+   */
+  let pendingReady = $state<Document | null>(null);
 
   /**
    * Dev-mode-only synthetic state derived from the URL's `?state=<kind>`
@@ -203,14 +222,16 @@
         pageState = { kind: 'flagged', preview };
         return;
       }
-      pageState = {
-        kind: 'ready',
-        document: {
-          text: preview.text,
-          title: preview.title,
-          sourceUrl: preview.sourceUrl,
-          headings: preview.headings
-        }
+      // Cinematic handoff (Task 13): keep `pageState` at `extracting`
+      // and stash the pending Document. The `<CinematicTransition>`
+      // overlay below renders while `pendingReady` is non-null and
+      // fires `advanceToReady` when its timeline completes (or
+      // synchronously under reduced-motion).
+      pendingReady = {
+        text: preview.text,
+        title: preview.title,
+        sourceUrl: preview.sourceUrl,
+        headings: preview.headings
       };
     } catch (err) {
       pageState = {
@@ -244,7 +265,39 @@
     pageState = { kind: 'idle' };
     urlInput = '';
     chat.messages = [];
+    // Defensive: a reset mid-transition should drop any pending handoff.
+    // (Today's UI has no reset button visible during extracting, but
+    // future surfaces — e.g. an abort gesture — might invoke this.)
+    pendingReady = null;
   }
+
+  /**
+   * `<CinematicTransition>` completion handler (Task 13). Called either
+   * after the GSAP timeline finishes (~1600ms) or synchronously on
+   * mount under reduced-motion. Flips `pageState` to the stashed
+   * `ready` and clears the handoff rune so the overlay unmounts on
+   * the next render.
+   *
+   * Guarded so a stray invocation with no pending handoff (e.g. a
+   * unit-test forcing the callback) is a safe no-op.
+   */
+  function advanceToReady(): void {
+    if (pendingReady === null) return;
+    pageState = { kind: 'ready', document: pendingReady };
+    pendingReady = null;
+  }
+
+  /**
+   * `transitioning` — true while the cinematic extracting → ready
+   * overlay should render. Derived from the existence of a pending
+   * `ready` document plus a non-overridden `extracting` underlying
+   * state. The dev-mode `?state=` override bypasses the transition
+   * entirely (the override path is for visual review of static
+   * states, not orchestration).
+   */
+  const transitioning = $derived(
+    overrideState === null && pageState.kind === 'extracting' && pendingReady !== null
+  );
 
   function sendChat(e: SubmitEvent) {
     e.preventDefault();
@@ -414,6 +467,21 @@
     onSendChat={sendChat}
     onReset={reset}
   />
+{/if}
+
+<!--
+  Cinematic transition overlay (Task 13, spec §4.2). Rendered on top of
+  the live `extracting` state while a pending `ready` is waiting in
+  `pendingReady`. The overlay's `onComplete` flips the underlying state
+  to `ready`, which clears `transitioning` on the next render and
+  unmounts this block.
+
+  Reduced-motion users: `<CinematicTransition>` fires `onComplete`
+  synchronously on mount, so the underlying state advances on the same
+  tick the overlay appears — the user never sees the overlay paint.
+-->
+{#if transitioning}
+  <CinematicTransition from="extracting" to="ready" onComplete={advanceToReady} />
 {/if}
 
 <style>

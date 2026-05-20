@@ -16,6 +16,7 @@
   import StatusPill from '../hud/StatusPill.svelte';
   import SysLabel from '../hud/SysLabel.svelte';
   import CornerStamp from '../hud/CornerStamp.svelte';
+  import { scrambleIn } from '../../motion/scrambleIn';
 
   /**
    * Props for ExtractingState.
@@ -42,7 +43,14 @@
 </div>
 
 <div class="extracting-state">
-  <p class="extracting-url" data-testid="extracting-url">{displayUrl}</p>
+  <!--
+    `scrambleIn` on the URL — spec §4.2 calls for "subtle scramble-text
+    on the URL during ingest". The action captures `textContent` at
+    mount and resolves through the cinematic glyph set. Under
+    reduced-motion the action is a no-op, so the URL is visible
+    immediately for those users.
+  -->
+  <p class="extracting-url" data-testid="extracting-url" use:scrambleIn>{displayUrl}</p>
 
   <HudPanel ticks={true}>
     <div class="extracting-panel-body">

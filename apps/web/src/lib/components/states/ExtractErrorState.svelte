@@ -22,6 +22,8 @@
   import StatusPill from '../hud/StatusPill.svelte';
   import SysLabel from '../hud/SysLabel.svelte';
   import CornerStamp from '../hud/CornerStamp.svelte';
+  import { phosphorFlash } from '../../motion/phosphorFlash';
+  import { scrambleIn } from '../../motion/scrambleIn';
 
   /**
    * Props for ExtractErrorState.
@@ -45,7 +47,17 @@
 
 <CornerStamp text="001 SESSION" position="bottom-right" />
 
-<div class="extract-error-header">
+<!--
+  `phosphorFlash` on the `// INGEST_FAILED` header (Task 13, spec §4.3).
+  Single amber pulse on mount — `trigger: errorCode` re-fires the
+  keyframe if the same component remounts for a different error code
+  without an intervening state swap. Color is amber (`--amber-alarm`)
+  to match the only amber surface in the entire UI.
+-->
+<div
+  class="extract-error-header"
+  use:phosphorFlash={{ trigger: errorCode, color: 'var(--amber-alarm)' }}
+>
   <span class="extract-error-header__label">
     <SysLabel kind="header">INGEST_FAILED</SysLabel>
   </span>
@@ -55,7 +67,15 @@
   <HudPanel variant="alarm">
     <div class="extract-error-panel-body">
       <p class="extract-error-message">{message}</p>
-      <span class="extract-error-code" data-testid="extract-error-code">{errorCode}</span>
+      <!--
+        `scrambleIn` on the error code (Task 13, spec §4.3). The code
+        is a pure-text leaf so the scramble plugin can tween it
+        without disturbing surrounding markup. Plays once on mount;
+        a fresh ExtractErrorState mount (new error) re-runs it.
+      -->
+      <span class="extract-error-code" data-testid="extract-error-code" use:scrambleIn
+        >{errorCode}</span
+      >
     </div>
   </HudPanel>
 
