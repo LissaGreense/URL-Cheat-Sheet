@@ -83,9 +83,11 @@
   function hitsFor(output: unknown): number | null {
     if (!output || typeof output !== 'object') return null;
     const o = output as Record<string, unknown>;
-    if (Array.isArray(o.hits)) return o.hits.length;
-    if (typeof o.count === 'number') return o.count;
-    if (typeof o.hits === 'number') return o.hits;
+    const hits = o['hits'];
+    if (Array.isArray(hits)) return hits.length;
+    if (typeof hits === 'number') return hits;
+    const count = o['count'];
+    if (typeof count === 'number') return count;
     return null;
   }
 
@@ -97,7 +99,8 @@
   function queryFor(input: unknown): string {
     if (!input || typeof input !== 'object') return '';
     const i = input as Record<string, unknown>;
-    return typeof i.query === 'string' ? i.query : '';
+    const q = i['query'];
+    return typeof q === 'string' ? q : '';
   }
 
   /**
@@ -130,9 +133,7 @@
     >
       {#if message.role === 'user'}
         <div class="message-stream__user">
-          <span class="message-stream__user-prefix" aria-hidden="true">
-            <SysLabel kind="action">&nbsp;</SysLabel>
-          </span>
+          <span class="message-stream__user-prefix" aria-hidden="true">&gt;</span>
           {#each message.parts as part, i (i)}
             {#if part.type === 'text'}
               <p class="message-stream__text">{part.text}</p>
@@ -218,11 +219,16 @@
 
   /*
     `> ` prefix for user messages, --green-acid micro-caps per
-    spec §4.5. We reuse SysLabel kind="action" so the prefix shares
-    the sys-voice register; the empty body slot keeps the glyph
-    visible without any label text.
+    spec §4.5. Single literal `>` glyph, sys-voice register
+    (small caps + wide tracking).
   */
-  .message-stream__user-prefix :global(.sys-label__prefix) {
+  .message-stream__user-prefix {
+    flex: 0 0 auto;
+    font-family: var(--font-body);
+    font-weight: 400;
+    font-size: 11px;
+    line-height: 1.2;
+    letter-spacing: 1px;
     color: var(--green-acid);
   }
 

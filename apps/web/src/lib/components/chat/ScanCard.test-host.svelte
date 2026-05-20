@@ -15,7 +15,13 @@
     errorGlyph?: boolean;
   };
 
-  let { toolName, status, statusTone, ticks, errorGlyph }: Props = $props();
+  let {
+    toolName,
+    status,
+    statusTone = 'normal',
+    ticks = false,
+    errorGlyph = false
+  }: Props = $props();
 </script>
 
 <ScanCard {toolName} {status} {statusTone} {ticks} {errorGlyph}>

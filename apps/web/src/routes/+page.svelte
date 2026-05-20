@@ -6,6 +6,7 @@
   import ExtractingState from '../lib/components/states/ExtractingState.svelte';
   import ExtractErrorState from '../lib/components/states/ExtractErrorState.svelte';
   import FlaggedState from '../lib/components/states/FlaggedState.svelte';
+  import ReadyState from '../lib/components/states/ReadyState.svelte';
 
   // `errorCode` was added to the extract-error branch in ucs-9g9 so the
   // ExtractErrorState component can render the raw `ExtractError['kind']`
@@ -154,165 +155,12 @@
   {:else if state.kind === 'flagged'}
     <FlaggedState preview={state.preview} onContinue={confirmFlagged} onReset={reset} />
   {:else if state.kind === 'ready'}
-    <p class="chip">
-      Grounded in: <strong>{state.document.title}</strong> ·
-      <button type="button" class="link" onclick={reset}>change</button>
-    </p>
-
-    <ol class="messages">
-      {#each chat.messages as message (message.id)}
-        <li class="message message--{message.role}">
-          <span class="role">{message.role}</span>
-          {#each message.parts as part, i (i)}
-            {#if part.type === 'text'}
-              <p class="text">{part.text}</p>
-            {:else if part.type === 'tool-finalize'}
-              {@const input = part.input as { answer?: string; citations?: string[] } | undefined}
-              {#if part.state === 'input-available' || part.state === 'output-available'}
-                <p class="text">{input?.answer ?? ''}</p>
-                {#if input?.citations && input.citations.length > 0}
-                  <p class="citations">
-                    Citations: {input.citations.join(', ')}
-                  </p>
-                {/if}
-              {:else if part.state === 'input-streaming'}
-                {#if input?.answer}
-                  <p class="text streaming">{input.answer}</p>
-                {:else}
-                  <p class="text streaming muted">Thinking…</p>
-                {/if}
-              {/if}
-            {:else if part.type === 'tool-grep_doc'}
-              <details class="tool">
-                <summary>searched the document ({part.state})</summary>
-                <pre>{JSON.stringify(part, null, 2)}</pre>
-              </details>
-            {:else if part.type?.startsWith('tool-') || part.type === 'dynamic-tool'}
-              <details class="tool">
-                <summary>tool call: {part.type}</summary>
-                <pre>{JSON.stringify(part, null, 2)}</pre>
-              </details>
-            {/if}
-          {/each}
-          {#if message.role === 'assistant' && !hasFinalize(message.parts) && (chat.status === 'submitted' || chat.status === 'streaming')}
-            <p class="text muted">Thinking…</p>
-          {/if}
-        </li>
-      {/each}
-      {#if awaitingAssistant}
-        <li class="message message--assistant">
-          <span class="role">assistant</span>
-          <p class="text muted">Thinking…</p>
-        </li>
-      {/if}
-    </ol>
-
-    <form onsubmit={sendChat} class="composer">
-      <input
-        type="text"
-        bind:value={chatInput}
-        placeholder="Ask about this page..."
-        aria-label="Message"
-        disabled={chat.status === 'streaming' || chat.status === 'submitted'}
-      />
-      <button type="submit" disabled={!chatInput.trim() || chat.status === 'streaming'}>Send</button
-      >
-    </form>
+    <ReadyState
+      document={state.document}
+      {chat}
+      bind:chatInput
+      onSendChat={sendChat}
+      onReset={reset}
+    />
   {/if}
 </main>
-
-<style>
-  .container {
-    max-width: 48rem;
-    margin: 2rem auto;
-    padding: 0 1rem;
-    font-family: ui-sans-serif, system-ui, sans-serif;
-  }
-  .hint {
-    color: #666;
-    font-size: 0.9rem;
-  }
-  .error {
-    color: #b00;
-  }
-  .chip {
-    background: #f0f0f0;
-    padding: 0.5rem 0.75rem;
-    border-radius: 4px;
-    font-size: 0.9rem;
-  }
-  .flagged {
-    border: 1px solid #e0a;
-    padding: 1rem;
-    border-radius: 6px;
-  }
-  .flagged h2 {
-    margin-top: 0;
-  }
-  .messages {
-    list-style: none;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  .message {
-    border: 1px solid #e5e5e5;
-    border-radius: 6px;
-    padding: 0.75rem 1rem;
-  }
-  .message--user {
-    background: #f7f7f7;
-  }
-  .role {
-    display: block;
-    font-size: 0.75rem;
-    color: #888;
-    text-transform: uppercase;
-    margin-bottom: 0.25rem;
-  }
-  .text {
-    margin: 0;
-    white-space: pre-wrap;
-  }
-  .text.streaming {
-    opacity: 0.85;
-  }
-  .text.muted,
-  .muted {
-    color: #888;
-    font-style: italic;
-  }
-  .citations {
-    margin: 0.5rem 0 0;
-    font-size: 0.85rem;
-    color: #555;
-  }
-  .tool {
-    margin-top: 0.5rem;
-    font-size: 0.8rem;
-  }
-  .tool pre {
-    background: #f0f0f0;
-    padding: 0.5rem;
-    overflow-x: auto;
-  }
-  .composer {
-    display: flex;
-    gap: 0.5rem;
-    margin-top: 1rem;
-  }
-  .composer input {
-    flex: 1;
-    padding: 0.5rem;
-    font-size: 1rem;
-  }
-  .link {
-    background: none;
-    border: none;
-    color: #06c;
-    cursor: pointer;
-    padding: 0;
-    font-size: inherit;
-  }
-</style>

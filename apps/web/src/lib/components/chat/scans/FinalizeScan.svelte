@@ -76,7 +76,9 @@
   toolName="FINALIZE"
   {status}
   statusTone={tone}
-  ticks={part.state === 'input-streaming' || part.state === 'input-available' || part.state === 'output-available'}
+  ticks={part.state === 'input-streaming' ||
+    part.state === 'input-available' ||
+    part.state === 'output-available'}
   errorGlyph={part.state === 'output-error'}
 >
   <div class="finalize">
