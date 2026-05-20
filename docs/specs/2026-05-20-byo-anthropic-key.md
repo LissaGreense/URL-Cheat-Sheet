@@ -147,6 +147,35 @@ key exists. The operator's commitments in code, enforced by review:
   (e.g., `400 { error: "Invalid key 'sk-ant-xxx'" }` is forbidden;
   `400 { error: "API key rejected by provider" }` is the correct
   shape).
+- The `createAnthropic({ apiKey })` provider must be constructed
+  *inside* the handler, per request. Caching it at module scope
+  keyed by `apiKey` (or by anything else) is forbidden — the cache
+  itself would become a cross-user leak.
+
+### Per-request isolation
+
+Each `/api/chat` request runs in its own lexical scope inside the
+`POST` handler. The user's key is bound to a `const` in that scope;
+concurrent requests each get their own. Vercel reuses serverless
+function *instances* across invocations — what's shared between
+invocations is module-scope state (top-level variables, anything on
+`globalThis`, singleton caches); what's NOT shared is anything
+declared inside the handler. The hygiene rules above exist
+specifically to keep that isolation intact.
+
+There is no notion of "current user" on the server — the app has no
+auth, no sessions, no cookies. Each request is identified only by the
+key it carries, and that key authenticates the request to Anthropic,
+not to us. Two users hitting `/api/chat` at the same moment are two
+HTTP requests with two disjoint stack frames; the server cannot mix
+them without an explicit programmer error (e.g., promoting `apiKey`
+to module scope, attaching it to `globalThis`, caching the provider).
+
+Streaming responses hold the handler's async chain open for the
+duration of the agent loop, sometimes tens of seconds. That's fine —
+the open scope belongs to that invocation only. Another request
+streaming in parallel has its own scope. They share a Node process
+but not a closure.
 
 ## Threat model — honest disclosure
 
