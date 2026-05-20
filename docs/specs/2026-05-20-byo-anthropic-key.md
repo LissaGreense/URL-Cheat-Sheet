@@ -58,6 +58,10 @@ streaming UI message protocol all stay.
   displays, "encrypted at rest" claims.
 - IP allowlists, origin restrictions, or any per-key access controls
   that Anthropic does not offer.
+- Preflight validation of the key on save (e.g., a probe call to
+  `/v1/models`). The first real chat message validates against
+  Anthropic; an extra round-trip on save adds latency and creates
+  confusing UX when the probe fails for transient network reasons.
 
 ## Architecture
 
@@ -141,8 +145,9 @@ key exists. The operator's commitments in code, enforced by review:
   body. This is called out explicitly in the spec so a future PR can't
   silently undo it.
 - The Vercel project must not enable "Function logs include request
-  body" or equivalent. Verified once at deploy time; documented in the
-  deployment checklist.
+  body" or equivalent. This is a Vercel UI setting, not a code change;
+  verify once during the initial deploy and re-verify any time the
+  project's logging/observability config changes.
 - The response to the client must not include the key in error bodies
   (e.g., `400 { error: "Invalid key 'sk-ant-xxx'" }` is forbidden;
   `400 { error: "API key rejected by provider" }` is the correct
@@ -358,25 +363,6 @@ chip, not behind a separate "Security" tab):
   argument (test fixture: `'sk-ant-test-key'`).
 - Verify the mock provider receives the key by intercepting
   `createAnthropic`'s call args.
-
-## Open questions for the plan stage
-
-1. Should the entry form sanity-check the key by hitting Anthropic's
-   `/v1/models` endpoint server-side on save (one cheap probe) to
-   distinguish "valid format, valid key" from "valid format, dead
-   key" before the first chat? Argues against: extra round trip,
-   network errors create confusing UX. Argues for: cleaner first-use
-   experience. Defer to plan-stage decision; default: no preflight,
-   let the first message validate.
-2. Should `/api/chat` surface a small server-side guard against
-   absurdly large message arrays or document blobs (e.g., reject
-   payloads > 1 MB) to prevent a hostile or buggy client from
-   spending the user's quota in one shot? Defer to plan; not blocking
-   for the spec.
-3. Branch-protection / deploy-checklist line item: confirm Vercel
-   project setting "include request bodies in function logs" is off.
-   This is a Vercel UI step, not a code change, but it belongs in
-   the deploy checklist.
 
 ## References
 
