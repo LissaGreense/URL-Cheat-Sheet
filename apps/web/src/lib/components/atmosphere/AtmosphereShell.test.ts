@@ -195,4 +195,28 @@ describe('AtmosphereShell', () => {
     expect(mobileBlockMatch).not.toBeNull();
     expect(mobileBlockMatch![1]).toMatch(/atmosphere__spec-dot:nth-child\(n\s*\+\s*5\)/);
   });
+
+  it('atmosphere.css gates the three drift animations on prefers-reduced-motion: no-preference', () => {
+    // ADR 0009 strict fallback: reduced-motion users must skip the
+    // three drift `animation:` declarations entirely. The motion-
+    // allowed block at ~line 302 of atmosphere.css wraps them in
+    // `@media (prefers-reduced-motion: no-preference)`. Source-text
+    // assertion (jsdom can't evaluate the media query, same as the
+    // mobile test above) — catches regressions where a future
+    // refactor moves an `animation:` declaration out of the
+    // no-preference block and silently ships an a11y regression.
+    const css = readFileSync(ATMOSPHERE_CSS_PATH, 'utf8');
+    expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*no-preference\)/);
+    // Extract the no-preference block contents up to the matching
+    // closing brace at column 0, same approach as the mobile test.
+    const noPrefBlockMatch = css.match(
+      /@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{([\s\S]*?)\n\}/
+    );
+    expect(noPrefBlockMatch).not.toBeNull();
+    const block = noPrefBlockMatch![1];
+    // All three drift animations must live inside the gated block.
+    expect(block).toMatch(/animation:\s*atmosphere-ambient-drift\b/);
+    expect(block).toMatch(/animation:\s*atmosphere-glow-drift\b/);
+    expect(block).toMatch(/animation:\s*atmosphere-spec-dot\b/);
+  });
 });
