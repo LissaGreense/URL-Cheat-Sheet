@@ -87,9 +87,6 @@
     height: 8px;
     pointer-events: none;
   }
-  .hud-panel--alarm .hud-panel__corner {
-    border-color: var(--amber-alarm);
-  }
   .hud-panel__corner--tl {
     top: -1px;
     left: -1px;
@@ -113,6 +110,17 @@
     right: -1px;
     border-bottom: 1px solid var(--hair);
     border-right: 1px solid var(--hair);
+  }
+  /*
+    ucs-jno fix: declared AFTER the per-corner `--tl|tr|bl|br` rules so
+    the alarm tint wins the cascade. The per-corner rules use shorthand
+    `border-top|right|bottom|left: 1px solid var(--hair)` which sets
+    `border-*-color` as part of the shorthand — declaring this override
+    before them lets the shorthand color reset it. Declaring it after
+    keeps both rules at the same specificity, with order as the tiebreaker.
+  */
+  .hud-panel--alarm .hud-panel__corner {
+    border-color: var(--amber-alarm);
   }
 
   /*
