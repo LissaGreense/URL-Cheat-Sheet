@@ -28,9 +28,7 @@ describe('StatusPill', () => {
 
   it('passes the state through verbatim (case preserved)', () => {
     const { container } = render(StatusPill, { props: { state: 'SCANNING' } });
-    expect(container.querySelector('.status-pill')!.textContent?.trim()).toBe(
-      '[ SCANNING ]'
-    );
+    expect(container.querySelector('.status-pill')!.textContent?.trim()).toBe('[ SCANNING ]');
   });
 
   it('renders the normal tone by default', () => {
