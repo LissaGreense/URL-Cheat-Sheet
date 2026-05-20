@@ -13,7 +13,8 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Reads a CSS custom property from `:root` and trims whitespace.
@@ -28,10 +29,12 @@ describe('tokens.css', () => {
   beforeAll(() => {
     // Vite's CSS pipeline strips `import './tokens.css'` for jsdom, and
     // the `?raw` query also returns empty under SvelteKit's plugin chain.
-    // Read the file directly off disk so JSDOM sees the real text. The
-    // test always runs from `apps/web/` (vitest's cwd), so resolving
-    // against `process.cwd()` is stable.
-    const cssPath = resolve(process.cwd(), 'src/lib/styles/tokens.css');
+    // Read the file directly off disk so JSDOM sees the real text.
+    // Resolve relative to *this file* (via `import.meta.url`) — not
+    // `process.cwd()`, which is `apps/web/` when run via the workspace
+    // filter but the repo root when CI runs `bun run test`.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const cssPath = resolve(here, './tokens.css');
     const css = readFileSync(cssPath, 'utf-8');
     const style = document.createElement('style');
     style.textContent = css;
