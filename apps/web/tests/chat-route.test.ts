@@ -27,7 +27,8 @@ function makeRequest(body: unknown): Request {
 const FIXTURE_DOCUMENT = {
   text: 'Hyper Text Coffee Pot Control Protocol.\nLine two of the doc.',
   title: 'Test doc',
-  sourceUrl: 'https://example.com/test'
+  sourceUrl: 'https://example.com/test',
+  headings: []
 };
 
 const FIXTURE_MESSAGES = [{ id: '1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }];

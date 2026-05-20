@@ -63,7 +63,8 @@ export default class AgentProvider implements ApiProvider {
     const document: Document = {
       text: extractResult.text,
       title: extractResult.title,
-      sourceUrl: fetchResult.value.finalUrl
+      sourceUrl: fetchResult.value.finalUrl,
+      headings: extractResult.headings
     };
 
     const messages: UIMessage[] = [

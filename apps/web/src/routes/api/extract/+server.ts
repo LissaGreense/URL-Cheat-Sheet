@@ -99,6 +99,7 @@ export const POST: RequestHandler = async ({ request }) => {
     text: extractResult.text,
     title: extractResult.title,
     sourceUrl: fetchResult.value.finalUrl,
+    headings: extractResult.headings,
     byteSize: extractResult.text.length,
     scan
   };
