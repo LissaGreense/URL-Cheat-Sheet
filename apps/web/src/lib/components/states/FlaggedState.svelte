@@ -26,6 +26,9 @@
   import StatusPill from '../hud/StatusPill.svelte';
   import SysLabel from '../hud/SysLabel.svelte';
   import CornerStamp from '../hud/CornerStamp.svelte';
+  import { phosphorFlash } from '../../motion/phosphorFlash';
+  import { splitLineReveal } from '../../motion/splitLineReveal';
+  import { scrambleIn } from '../../motion/scrambleIn';
   import type { ExtractResponse } from '@url-cheat-sheet/schemas';
 
   /**
@@ -50,7 +53,14 @@
 
 <CornerStamp text="001 SESSION" position="bottom-right" />
 
-<div class="flagged-header">
+<!--
+  `phosphorFlash` on the `// SOURCE_CAVEAT` caveat label (Task 13,
+  spec §4.4). Uses the default green-acid color — memex voice,
+  NOT alarm voice — matching the FlaggedState taste decision the
+  spec calls out. `trigger: preview.sourceUrl` re-fires if a fresh
+  flagged preview replaces the previous one without a state swap.
+-->
+<div class="flagged-header" use:phosphorFlash={{ trigger: preview.sourceUrl }}>
   <SysLabel kind="header">SOURCE_CAVEAT</SysLabel>
 </div>
 
@@ -72,10 +82,18 @@
         </div>
       </div>
 
-      <ul class="flagged-threats">
+      <!--
+        `splitLineReveal` on the threat list as a whole (Task 13,
+        spec §4.4). SplitText splits by visible lines, so each `<li>`
+        becomes its own clip-path-revealed line with the 60ms stagger
+        from the action's default. Per-row `scrambleIn` on the
+        `.flagged-threat__type` pure-text span resolves the threat
+        name with the cinematic glyph set.
+      -->
+      <ul class="flagged-threats" use:splitLineReveal>
         {#each preview.scan.threats as threat, i (threat.type + i)}
           <li class="flagged-threat" data-testid="threat-row">
-            <span class="flagged-threat__type">{threat.type}</span>
+            <span class="flagged-threat__type" use:scrambleIn>{threat.type}</span>
             <div class="flagged-threat__bar-track" aria-hidden="true">
               <div
                 class="flagged-threat__bar"

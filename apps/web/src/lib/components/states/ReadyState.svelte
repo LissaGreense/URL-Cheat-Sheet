@@ -31,6 +31,7 @@
   import HudPanel from '../hud/HudPanel.svelte';
   import MessageStream from '../chat/MessageStream.svelte';
   import Composer from '../chat/Composer.svelte';
+  import { splitLineReveal } from '../../motion/splitLineReveal';
 
   /**
    * Props for ReadyState.
@@ -163,7 +164,14 @@
   -->
   <section class="ready-state__thread">
     {#if showGreeting}
-      <div class="ready-state__greeting" data-testid="ready-greeting">
+      <!--
+        `splitLineReveal` on the greeting (Task 13, spec §4.5).
+        SplitText splits the wrapper's visible lines and runs a
+        staggered clip-path reveal — the signature "memory loaded"
+        moment. Reduced-motion users get the static text immediately
+        per the action's ADR 0009 contract.
+      -->
+      <div class="ready-state__greeting" data-testid="ready-greeting" use:splitLineReveal>
         <p class="ready-state__greeting-line">URL has been loaded to your memory.</p>
         <p class="ready-state__greeting-line">Ask questions to get knowledge access.</p>
       </div>
