@@ -89,7 +89,15 @@
   import FlaggedState from '../lib/components/states/FlaggedState.svelte';
   import ReadyState from '../lib/components/states/ReadyState.svelte';
 
-  let state = $state<State>({ kind: 'idle' });
+  // Renamed from `state` to `pageState` to dodge a svelte-check
+  // resolution quirk: when the reactive variable is literally named
+  // `state` and `<State>` is passed as a type argument to the `$state`
+  // rune, svelte2tsx/svelte-check sometimes loses the rune binding and
+  // falls back to treating `$state` as a Svelte-4 store auto-subscribe
+  // of a local variable named `state`, which then cascades into a
+  // "Block-scoped variable '$state' used before its declaration"
+  // diagnostic. Renaming is the minimal, runtime-equivalent fix.
+  let pageState = $state<State>({ kind: 'idle' });
   let urlInput = $state('');
   let chatInput = $state('');
 
@@ -97,8 +105,8 @@
    * Dev-mode-only synthetic state derived from the URL's `?state=<kind>`
    * search param. In production builds the entire branch is removed by
    * Vite's tree-shaker (the `if (!import.meta.env.DEV)` early-return
-   * leaves the constant `null` in its place, and the `?? state` fallback
-   * collapses to the real state machine). Spec §6.5.
+   * leaves the constant `null` in its place, and the `?? pageState`
+   * fallback collapses to the real state machine). Spec §6.5.
    */
   const overrideState = $derived.by<State | null>(() => {
     if (!import.meta.env.DEV) return null;
@@ -109,7 +117,7 @@
    * The state the template actually renders. Equals `overrideState` when
    * a dev override is active, otherwise the real state-machine value.
    */
-  const renderState = $derived<State>(overrideState ?? state);
+  const renderState = $derived<State>(overrideState ?? pageState);
 
   let document = $derived(renderState.kind === 'ready' ? renderState.document : null);
 
@@ -126,7 +134,7 @@
     e.preventDefault();
     const url = urlInput.trim();
     if (!url) return;
-    state = { kind: 'extracting', url };
+    pageState = { kind: 'extracting', url };
     try {
       const res = await fetch('/api/extract', {
         method: 'POST',
@@ -136,15 +144,15 @@
       const body = await res.json();
       if (!res.ok) {
         const err = body as ExtractError;
-        state = { kind: 'extract-error', message: humanizeError(err), errorCode: err.kind };
+        pageState = { kind: 'extract-error', message: humanizeError(err), errorCode: err.kind };
         return;
       }
       const preview = body as ExtractResponse;
       if (!preview.scan.safe) {
-        state = { kind: 'flagged', preview };
+        pageState = { kind: 'flagged', preview };
         return;
       }
-      state = {
+      pageState = {
         kind: 'ready',
         document: {
           text: preview.text,
@@ -154,7 +162,7 @@
         }
       };
     } catch (err) {
-      state = {
+      pageState = {
         kind: 'extract-error',
         message: 'Network error: ' + String(err),
         errorCode: 'NETWORK_FAILURE'
@@ -163,16 +171,26 @@
   }
 
   function confirmFlagged() {
-    if (state.kind !== 'flagged') return;
-    const { preview } = state;
-    state = {
+    if (pageState.kind !== 'flagged') return;
+    const { preview } = pageState;
+    // `headings` is required by the `Document` shape (ucs-2qf added it).
+    // The loadUrl path already forwards `preview.headings`; this branch
+    // had been omitting it — a latent bug surfaced once svelte-check's
+    // `exactOptionalPropertyTypes`+`Pick` narrowing reached this file
+    // via the corrected tsconfig.
+    pageState = {
       kind: 'ready',
-      document: { text: preview.text, title: preview.title, sourceUrl: preview.sourceUrl }
+      document: {
+        text: preview.text,
+        title: preview.title,
+        sourceUrl: preview.sourceUrl,
+        headings: preview.headings
+      }
     };
   }
 
   function reset() {
-    state = { kind: 'idle' };
+    pageState = { kind: 'idle' };
     urlInput = '';
     chat.messages = [];
   }
@@ -180,7 +198,7 @@
   function sendChat(e: SubmitEvent) {
     e.preventDefault();
     const text = chatInput.trim();
-    if (!text || state.kind !== 'ready') return;
+    if (!text || pageState.kind !== 'ready') return;
     chat.sendMessage({ text });
     chatInput = '';
   }

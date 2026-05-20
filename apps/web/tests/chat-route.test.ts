@@ -12,7 +12,7 @@ beforeEach(() => {
 });
 
 async function importPost() {
-  const mod = await import('../src/routes/api/chat/+server.ts');
+  const mod = await import('../src/routes/api/chat/+server');
   return mod.POST;
 }
 
