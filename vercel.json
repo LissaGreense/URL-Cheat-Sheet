@@ -4,5 +4,10 @@
   "installCommand": "bun install --frozen-lockfile",
   "buildCommand": "bun --filter @url-cheat-sheet/web build",
   "outputDirectory": "apps/web/.vercel/output",
-  "framework": "sveltekit"
+  "framework": "sveltekit",
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  }
 }
