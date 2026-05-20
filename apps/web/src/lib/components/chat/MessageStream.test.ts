@@ -102,7 +102,7 @@ describe('MessageStream', () => {
                 type: 'tool-grep_doc',
                 toolCallId: 'c1',
                 state: 'input-streaming',
-                input: { query: 'tea' }
+                input: { pattern: 'tea' }
               }
             ])
           ]
@@ -113,6 +113,57 @@ describe('MessageStream', () => {
     // GrepDocScan renders the GREP_DOC header inside a status pill block.
     expect(container.textContent).toContain('GREP_DOC');
     expect(container.querySelector('.status-pill')).not.toBeNull();
+  });
+
+  /**
+   * ucs-m97 regression. The grep_doc tool's input shape is
+   * `{ pattern: string }` (see packages/agent/src/tools/grep-doc.ts —
+   * renamed from `query` in ucs-8nl / PR #120). MessageStream's
+   * queryFor must read `input.pattern`, or the GREP_DOC scan card
+   * renders `q: ""` for every search.
+   */
+  it('renders the actual pattern inside the GREP_DOC card (ucs-m97)', () => {
+    const { container } = render(MessageStreamHost, {
+      props: {
+        chat: {
+          messages: [
+            msg('m1', 'assistant', [
+              {
+                type: 'tool-grep_doc',
+                toolCallId: 'c1',
+                state: 'input-available',
+                input: { pattern: 'hypertext' }
+              }
+            ])
+          ]
+        },
+        awaitingAssistant: false
+      }
+    });
+    const queryText = container.querySelector('.grep-doc__query-text');
+    expect(queryText?.textContent).toBe('"hypertext"');
+  });
+
+  it('renders pipe-separated alternatives verbatim (ucs-m97)', () => {
+    const { container } = render(MessageStreamHost, {
+      props: {
+        chat: {
+          messages: [
+            msg('m1', 'assistant', [
+              {
+                type: 'tool-grep_doc',
+                toolCallId: 'c1',
+                state: 'input-available',
+                input: { pattern: 'error|exception|fault' }
+              }
+            ])
+          ]
+        },
+        awaitingAssistant: false
+      }
+    });
+    const queryText = container.querySelector('.grep-doc__query-text');
+    expect(queryText?.textContent).toBe('"error|exception|fault"');
   });
 
   it('routes tool-finalize parts to FinalizeScan', () => {
@@ -189,7 +240,7 @@ describe('MessageStream', () => {
                 type: 'tool-grep_doc',
                 toolCallId: 'c1',
                 state: 'output-available',
-                input: { query: 'tea' },
+                input: { pattern: 'tea' },
                 output: { hits: 2 }
               },
               { type: 'text', text: 'tea is hot.' }
