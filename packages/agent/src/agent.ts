@@ -11,15 +11,49 @@ import type { Document } from '@url-cheat-sheet/schemas';
 import { SYSTEM_PROMPT } from './prompt';
 import { makeGrepDoc } from './tools/grep-doc';
 import { finalize } from './tools/finalize';
+import { makeOutline } from './tools/outline';
+import { makeReadLines } from './tools/read-lines';
+
+/**
+ * Maximum number of model rounds before the loop stops. Set to 12 (up from 10)
+ * after ucs-0f3 documented a 3/10 empty-output flake on RFC 7168's
+ * `trap_japanese_tea` case: the model burned 14 tool calls across 10 steps
+ * exploring tea synonyms (oolong, matcha, puer, herbal, …) without reaching
+ * the step where it would have called `finalize`. Two extra steps of
+ * headroom prevents the most common flake; `FORCE_FINALIZE_AT_STEP` is the
+ * structural backstop for the rest.
+ */
+const STEP_BUDGET = 12;
+
+/**
+ * Step (0-indexed in AI SDK v6) at which `prepareStep` flips `toolChoice` to
+ * force `finalize`. Set to `STEP_BUDGET - 1`: the LAST allowed step is
+ * reserved exclusively for `finalize`. The model gets `STEP_BUDGET - 1` free
+ * exploration steps; if it hasn't called `finalize` by then, the last step
+ * is forced.
+ *
+ * This makes empty-output structurally impossible at the agent layer: even
+ * if the model would have exhausted the budget exploring, the final step is
+ * guaranteed to invoke `finalize`. The Zod `answer.min(1)` constraint then
+ * guarantees the answer is non-empty when emitted.
+ */
+const FORCE_FINALIZE_AT_STEP = STEP_BUDGET - 1;
 
 /**
  * Stream a chat response grounded in the supplied document. The model may
- * call the `grep_doc` tool zero or more times, then MUST end its turn by
- * calling `finalize` with its answer + citations. The `hasToolCall('finalize')`
- * stop condition makes empty assistant output structurally impossible.
+ * call grep/outline/read_lines tools to explore, then MUST end its turn by
+ * calling `finalize` with its answer + citations.
  *
- * The step budget is 10 (up from 8) because `finalize` itself counts as a
- * tool call — leaving 9 steps for `grep_doc` exploration.
+ * Structural empty-output prevention is a 3-layer cake:
+ *   1. `hasToolCall('finalize')` stop condition halts immediately when the
+ *      model voluntarily calls `finalize` (the normal happy path).
+ *   2. `prepareStep` forces `toolChoice: finalize` on the last allowed step
+ *      so the model is structurally compelled to finalize if it hasn't yet
+ *      (catches the ucs-0f3 flake — model exploring synonyms past the
+ *      voluntary-finalize point).
+ *   3. `agent-provider.ts` synthesises a typed refusal on the rare case the
+ *      stream still ends without a `finalize` chunk (defense in depth — the
+ *      provider's safety net, NOT a normal code path).
  *
  * Returns a `Response` carrying the AI SDK UI message stream — the caller
  * pipes it straight back to the client.
@@ -33,15 +67,26 @@ export async function streamChat(messages: UIMessage[], document: Document): Pro
   // is unchanged; only the input-schema variance check is bypassed.
   const tools = {
     grep_doc: makeGrepDoc(document.text),
-    finalize
+    finalize,
+    outline: makeOutline(document.text, document.headings),
+    read_lines: makeReadLines(document.text)
   } as unknown as ToolSet;
   const result = streamText({
     model: anthropic('claude-sonnet-4-6'),
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
     tools,
-    stopWhen: [stepCountIs(10), hasToolCall('finalize')],
-    temperature: 0
+    stopWhen: [stepCountIs(STEP_BUDGET), hasToolCall('finalize')],
+    temperature: 0,
+    prepareStep: ({ stepNumber }) => {
+      // On the last allowed step, force the model to call finalize. This is
+      // the structural backstop for ucs-0f3: without it, the model can burn
+      // the entire budget exploring tools and never voluntarily finalize.
+      if (stepNumber >= FORCE_FINALIZE_AT_STEP) {
+        return { toolChoice: { type: 'tool', toolName: 'finalize' } };
+      }
+      return undefined;
+    }
   });
   return result.toUIMessageStreamResponse();
 }

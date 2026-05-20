@@ -128,8 +128,15 @@ with a fresh `describe('chatRequestSchema')`):
   this to module scope; doing so creates a cross-user cache
   (spec § "Server-side discipline" forbids this).
 - Pass `provider('claude-sonnet-4-6')` to `streamText`'s `model`
-  option. Everything else (`SYSTEM_PROMPT`, tools, `stopWhen`,
-  `temperature: 0`) is unchanged.
+  option. Everything else is unchanged: `SYSTEM_PROMPT`, the full
+  tools set (which now includes `grep_doc`, `finalize`, `outline`,
+  `read_lines` after the ucs-ec6 navigation-tools landing),
+  `stopWhen: [stepCountIs(STEP_BUDGET), hasToolCall('finalize')]`,
+  `temperature: 0`, and the `prepareStep` callback that forces
+  `toolChoice: finalize` at `FORCE_FINALIZE_AT_STEP`. **Preserve
+  all of this verbatim** — these are the 3-layer empty-output
+  prevention scheme from ucs-0f3 + ucs-ec6; the impl agent must
+  not "simplify" them while wiring in the per-request provider.
 - Pass `abortSignal` into `streamText({ abortSignal })`. When the
   client navigates away or aborts, the signal propagates through
   to the Anthropic fetch and stops billing.
@@ -152,8 +159,12 @@ with a fresh `describe('chatRequestSchema')`):
 - `streamChat` requires a `string` apiKey at the type level (callers
   fail `bunx tsc` without it).
 - The function constructs a fresh provider on each invocation.
-- The system prompt, tools, stop conditions, and temperature are
-  byte-identical to the current `agent.ts:38–45` configuration.
+- All existing agent configuration is preserved verbatim:
+  `SYSTEM_PROMPT`, all four tools (`grep_doc`, `finalize`,
+  `outline`, `read_lines`), `stopWhen`, `temperature`, AND the
+  `prepareStep` callback with `FORCE_FINALIZE_AT_STEP` logic.
+  (The repo state on main moved past the original "10 step
+  budget, 2 tools" assumption — see ucs-ec6 + ucs-0f3.)
 - No module-scope variable holds `apiKey`, the provider, or any
   derivative.
 
@@ -404,14 +415,27 @@ using `@testing-library/svelte` already in devDependencies)
 
 **Files**
 - Modify: `apps/web/src/routes/+page.svelte`
+- Modify (likely): `apps/web/src/lib/components/states/ReadyState.svelte`
+  — this is where the chat composer now lives after the
+  cinematic-memex-hud Phase 1 landings (ucs-9g9 / ucs-wny). The
+  impl agent should locate the composer (search for `<Composer />`
+  or the existing `chatInput` binding) and apply the apiKey
+  gating there, while keeping the `apiKey` rune at the top-level
+  `+page.svelte` and threading it down via prop.
+- Modify (likely): `apps/web/src/lib/components/states/IdleState.svelte`
+  — the "Add your Anthropic API key in settings to start chatting"
+  banner copy may belong here if IdleState is what renders when
+  no URL is loaded; alternative is top-level in `+page.svelte`.
+  Impl agent decides based on the state-component contract.
 
 **State changes**
-- Add a top-level rune: `let apiKey = $state<string | null>(null);`.
+- Add a top-level rune in `+page.svelte`: `let apiKey = $state<string | null>(null);`.
 - Optionally add a `drawerOpen = $state(false)` rune to control the
-  drawer's open/closed state (or use CSS-only with `<details>` —
-  pick whichever fits Svelte 5 idioms in this codebase; check
-  whether `+page.svelte` already uses `<details>` for the
-  prompt-injection flagged-page disclosure for a stylistic match).
+  drawer's open/closed state.
+- The `apiKey` is passed *down* into whichever state component owns
+  the composer (likely `ReadyState`, which currently receives the
+  `Chat` instance as a prop). The composer's disabled/placeholder
+  logic reads the prop.
 
 **UI changes**
 - Add a gear-icon button in the top-right of the page (sibling to

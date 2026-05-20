@@ -46,6 +46,13 @@ describe('SYSTEM_PROMPT', () => {
     expect(SYSTEM_PROMPT.toLowerCase()).toContain('do not estimate or round');
     expect(SYSTEM_PROMPT.toLowerCase()).toContain('uncited claims are forbidden');
   });
+
+  it('teaches strict refusal-with-citation', () => {
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('must cite at least one');
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('does not cover');
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('outline()');
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('read_lines');
+  });
 });
 
 describe('streamChat', () => {
@@ -83,7 +90,7 @@ describe('streamChat', () => {
 
     const tools = vi.mocked(streamText).mock.calls[0]![0]!.tools;
     expect(tools).toBeDefined();
-    expect(Object.keys(tools!).sort()).toEqual(['finalize', 'grep_doc']);
+    expect(Object.keys(tools!).sort()).toEqual(['finalize', 'grep_doc', 'outline', 'read_lines']);
   });
 
   it('uses an array stopWhen of length 2 (step budget + hasToolCall(finalize))', async () => {
@@ -94,9 +101,34 @@ describe('streamChat', () => {
     expect(stopWhen as unknown[]).toHaveLength(2);
   });
 
-  it('bumps the step budget to 10 so finalize counts within the loop', async () => {
+  it('uses a step budget of 12 (10 exploration + 1 voluntary-finalize + 1 forced-finalize)', async () => {
     await streamChat(messages, document);
 
-    expect(vi.mocked(stepCountIs)).toHaveBeenCalledWith(10);
+    expect(vi.mocked(stepCountIs)).toHaveBeenCalledWith(12);
+  });
+
+  it('forces toolChoice: finalize on the last allowed step (ucs-0f3 structural fix)', async () => {
+    await streamChat(messages, document);
+
+    const { prepareStep } = vi.mocked(streamText).mock.calls[0]![0]!;
+    expect(typeof prepareStep).toBe('function');
+
+    const forced = await prepareStep!({
+      stepNumber: 11,
+      steps: [],
+      model: {} as never,
+      messages: [],
+      experimental_context: undefined
+    });
+    expect(forced).toEqual({ toolChoice: { type: 'tool', toolName: 'finalize' } });
+
+    const early = await prepareStep!({
+      stepNumber: 5,
+      steps: [],
+      model: {} as never,
+      messages: [],
+      experimental_context: undefined
+    });
+    expect(early).toBeUndefined();
   });
 });

@@ -2,11 +2,21 @@
   import { Chat } from '@ai-sdk/svelte';
   import { DefaultChatTransport } from 'ai';
   import type { Document, ExtractResponse, ExtractError } from '@url-cheat-sheet/schemas';
+  import IdleState from '../lib/components/states/IdleState.svelte';
+  import ExtractingState from '../lib/components/states/ExtractingState.svelte';
+  import ExtractErrorState from '../lib/components/states/ExtractErrorState.svelte';
+  import FlaggedState from '../lib/components/states/FlaggedState.svelte';
 
+  // `errorCode` was added to the extract-error branch in ucs-9g9 so the
+  // ExtractErrorState component can render the raw `ExtractError['kind']`
+  // (e.g. FETCH_TIMEOUT) in sys-voice micro-caps next to the humanized
+  // message — required by §4.3 of the spec. The network-failure fallback
+  // path (catch block, no ExtractError body) uses the synthetic
+  // 'NETWORK_FAILURE' code since no schema kind covers a transport error.
   type State =
     | { kind: 'idle' }
     | { kind: 'extracting'; url: string }
-    | { kind: 'extract-error'; message: string }
+    | { kind: 'extract-error'; message: string; errorCode: string }
     | { kind: 'flagged'; preview: ExtractResponse }
     | { kind: 'ready'; document: Document };
 
@@ -38,7 +48,8 @@
       });
       const body = await res.json();
       if (!res.ok) {
-        state = { kind: 'extract-error', message: humanizeError(body as ExtractError) };
+        const err = body as ExtractError;
+        state = { kind: 'extract-error', message: humanizeError(err), errorCode: err.kind };
         return;
       }
       const preview = body as ExtractResponse;
@@ -56,7 +67,11 @@
         }
       };
     } catch (err) {
-      state = { kind: 'extract-error', message: 'Network error: ' + String(err) };
+      state = {
+        kind: 'extract-error',
+        message: 'Network error: ' + String(err),
+        errorCode: 'NETWORK_FAILURE'
+      };
     }
   }
 
@@ -131,34 +146,13 @@
   <h1>URL Cheat Sheet</h1>
 
   {#if state.kind === 'idle'}
-    <p class="hint">Paste a URL to start chatting about a page.</p>
-    <form onsubmit={loadUrl} class="composer">
-      <input type="url" bind:value={urlInput} placeholder="https://..." aria-label="Page URL" />
-      <button type="submit" disabled={!urlInput.trim()}>Load page</button>
-    </form>
+    <IdleState bind:urlInput onSubmit={loadUrl} />
   {:else if state.kind === 'extracting'}
-    <p class="hint">Loading {state.url}…</p>
+    <ExtractingState url={state.url} />
   {:else if state.kind === 'extract-error'}
-    <p class="error">{state.message}</p>
-    <button type="button" onclick={reset}>Try a different URL</button>
+    <ExtractErrorState message={state.message} errorCode={state.errorCode} onReset={reset} />
   {:else if state.kind === 'flagged'}
-    <section class="flagged">
-      <h2>⚠ Possible prompt-injection patterns detected</h2>
-      <p><strong>Page:</strong> {state.preview.title}</p>
-      <p><strong>URL:</strong> {state.preview.sourceUrl}</p>
-      <p>Detected:</p>
-      <ul>
-        {#each state.preview.scan.threats as t (t.type + t.severity)}
-          <li>{t.type} (severity {t.severity.toFixed(2)})</li>
-        {/each}
-      </ul>
-      <p class="hint">
-        This often happens with pages that discuss AI security or quote attack examples. Your chat
-        will treat this page as an untrusted source whether or not you continue.
-      </p>
-      <button type="button" onclick={confirmFlagged}>Continue with this page</button>
-      <button type="button" onclick={reset}>Use a different URL</button>
-    </section>
+    <FlaggedState preview={state.preview} onContinue={confirmFlagged} onReset={reset} />
   {:else if state.kind === 'ready'}
     <p class="chip">
       Grounded in: <strong>{state.document.title}</strong> ·
