@@ -2,12 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { chatRequestSchema, type ChatRequest } from '../src/chat.ts';
 
 /**
- * Known-good request body fixture: a single user message, a valid
- * grounding document, and a non-empty apiKey. Reused across the
- * positive and negative cases below — individual tests mutate a
- * shallow copy to express the scenario under test.
+ * Body shape WITHOUT apiKey — used directly in the "rejects when
+ * missing" test, and spread into `VALID_BODY` for every positive
+ * case. Constructed this way (rather than destructuring `apiKey`
+ * out of a full fixture) so no `eslint-disable` is needed for an
+ * unused destructure binding.
  */
-const VALID_BODY = {
+const BODY_WITHOUT_API_KEY = {
   messages: [
     {
       id: 'm1',
@@ -20,9 +21,10 @@ const VALID_BODY = {
     title: 'Doc',
     sourceUrl: 'https://example.com/',
     headings: []
-  },
-  apiKey: 'sk-ant-test-key'
+  }
 };
+
+const VALID_BODY = { ...BODY_WITHOUT_API_KEY, apiKey: 'sk-ant-test-key' };
 
 describe('chatRequestSchema', () => {
   it('parses a known-good body with apiKey', () => {
@@ -31,9 +33,7 @@ describe('chatRequestSchema', () => {
   });
 
   it('rejects a body missing apiKey', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { apiKey: _omit, ...withoutKey } = VALID_BODY;
-    const result = chatRequestSchema.safeParse(withoutKey);
+    const result = chatRequestSchema.safeParse(BODY_WITHOUT_API_KEY);
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues.length).toBeGreaterThan(0);
