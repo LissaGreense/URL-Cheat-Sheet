@@ -8,7 +8,10 @@
   routes/+page.svelte (untouched in Task 1 — Task 3/5 re-skins it).
 -->
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
+  import { gsap } from 'gsap';
+  import Lenis from 'lenis';
 
   // Design tokens (palette / type / easing / duration) — applied at :root.
   import '../lib/styles/tokens.css';
@@ -24,6 +27,8 @@
   import '@fontsource/space-grotesk/600.css';
 
   import AtmosphereShell from '../lib/components/atmosphere/AtmosphereShell.svelte';
+  import { registerGsap } from '../lib/motion/registerGsap';
+  import { prefersReducedMotion } from '../lib/motion/_reducedMotion';
 
   /**
    * Layout props.
@@ -34,6 +39,31 @@
   };
 
   let { children }: Props = $props();
+
+  onMount(() => {
+    // Register GSAP plugins once. Safe under reduced-motion — registration
+    // is a no-op until something animates (see ADR 0009).
+    registerGsap();
+
+    // Strict reduced-motion fallback: skip Lenis entirely so the browser's
+    // native (non-inertial) scroll is what the user gets. ADR 0009.
+    if (prefersReducedMotion()) return;
+
+    const lenis = new Lenis({ smoothWheel: true });
+
+    // Drive Lenis from GSAP's ticker so any scroll-linked GSAP animations
+    // stay in lockstep with the smoothed scroll position. GSAP ticker
+    // passes time in seconds; Lenis.raf expects milliseconds.
+    const tick = (time: number): void => {
+      lenis.raf(time * 1000);
+    };
+    gsap.ticker.add(tick);
+
+    return () => {
+      gsap.ticker.remove(tick);
+      lenis.destroy();
+    };
+  });
 </script>
 
 <AtmosphereShell>
