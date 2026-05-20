@@ -55,7 +55,12 @@ export const extractErrorKindSchema = z.enum([
   'FETCH_HTTP_ERROR',
   'FETCH_NETWORK',
   'EMPTY_EXTRACTION',
-  'PARSE_FAILED'
+  'PARSE_FAILED',
+  // ucs-tz0: catch-all for unhandled exceptions in the extract pipeline.
+  // The handler wraps every stage in try/catch and turns any thrown
+  // exception into this kind with HTTP 500. Without it, Vercel returns
+  // a bare 502 with no body and we can't tell what crashed.
+  'INTERNAL_ERROR'
 ]);
 
 export const extractErrorSchema = z.strictObject({
