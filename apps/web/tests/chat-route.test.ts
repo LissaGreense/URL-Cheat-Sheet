@@ -32,6 +32,7 @@ const FIXTURE_DOCUMENT = {
 };
 
 const FIXTURE_MESSAGES = [{ id: '1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }];
+const FIXTURE_API_KEY = 'sk-ant-test-key';
 
 describe('POST /api/chat', () => {
   it('400s on malformed body', async () => {
@@ -43,7 +44,9 @@ describe('POST /api/chat', () => {
 
   it('400s when document is missing', async () => {
     const POST = await importPost();
-    const res = await POST({ request: makeRequest({ messages: FIXTURE_MESSAGES }) } as never);
+    const res = await POST({
+      request: makeRequest({ messages: FIXTURE_MESSAGES, apiKey: FIXTURE_API_KEY })
+    } as never);
     expect(res.status).toBe(400);
     expect(streamChatMock).not.toHaveBeenCalled();
   });
@@ -52,7 +55,11 @@ describe('POST /api/chat', () => {
     delete process.env['ANTHROPIC_API_KEY'];
     const POST = await importPost();
     const res = await POST({
-      request: makeRequest({ messages: FIXTURE_MESSAGES, document: FIXTURE_DOCUMENT })
+      request: makeRequest({
+        messages: FIXTURE_MESSAGES,
+        document: FIXTURE_DOCUMENT,
+        apiKey: FIXTURE_API_KEY
+      })
     } as never);
     expect(res.status).toBe(500);
     const payload = await res.json();
@@ -69,7 +76,11 @@ describe('POST /api/chat', () => {
     );
     const POST = await importPost();
     const res = await POST({
-      request: makeRequest({ messages: FIXTURE_MESSAGES, document: FIXTURE_DOCUMENT })
+      request: makeRequest({
+        messages: FIXTURE_MESSAGES,
+        document: FIXTURE_DOCUMENT,
+        apiKey: FIXTURE_API_KEY
+      })
     } as never);
     expect(res.status).toBe(200);
     expect(streamChatMock).toHaveBeenCalledOnce();
@@ -85,7 +96,8 @@ describe('POST /api/chat', () => {
         id: 'chat-session-123',
         trigger: 'submit-message',
         messages: FIXTURE_MESSAGES,
-        document: FIXTURE_DOCUMENT
+        document: FIXTURE_DOCUMENT,
+        apiKey: FIXTURE_API_KEY
       })
     } as never);
     expect(res.status).toBe(200);

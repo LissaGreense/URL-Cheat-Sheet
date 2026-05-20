@@ -11,6 +11,12 @@ import { documentSchema } from './extract';
  *
  * `document` is the per-request grounding document threaded in from the
  * client's component state (see docs/specs/2026-05-19-url-fetcher.md).
+ *
+ * `apiKey` is the per-request user-supplied Anthropic key (BYO key flow,
+ * see docs/specs/2026-05-20-byo-anthropic-key.md). Required, non-empty
+ * string. Format-level validation (`sk-ant-` prefix) is enforced UX-side
+ * so the schema doesn't over-constrain — a corporate prefix variant or
+ * future Anthropic key shape change should not break the endpoint.
  */
 export const chatRequestSchema = z.object({
   messages: z.array(
@@ -20,7 +26,8 @@ export const chatRequestSchema = z.object({
       parts: z.array(z.unknown())
     })
   ),
-  document: documentSchema
+  document: documentSchema,
+  apiKey: z.string().min(1)
 });
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
