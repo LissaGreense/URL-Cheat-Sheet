@@ -3,6 +3,7 @@ import {
   threatSchema,
   scanResultSchema,
   documentSchema,
+  headingSchema,
   extractRequestSchema,
   extractResponseSchema,
   extractErrorSchema
@@ -49,19 +50,90 @@ describe('scanResultSchema', () => {
   });
 });
 
+describe('headingSchema', () => {
+  it('accepts a valid heading', () => {
+    expect(() => headingSchema.parse({ text: 'Intro', level: 1, line: 1 })).not.toThrow();
+  });
+
+  it('accepts levels 1 through 6', () => {
+    for (const level of [1, 2, 3, 4, 5, 6] as const) {
+      expect(() => headingSchema.parse({ text: 'h', level, line: 1 })).not.toThrow();
+    }
+  });
+
+  it('rejects level 0', () => {
+    expect(() => headingSchema.parse({ text: 'h', level: 0, line: 1 })).toThrow();
+  });
+
+  it('rejects level 7', () => {
+    expect(() => headingSchema.parse({ text: 'h', level: 7, line: 1 })).toThrow();
+  });
+
+  it('rejects empty text', () => {
+    expect(() => headingSchema.parse({ text: '', level: 1, line: 1 })).toThrow();
+  });
+
+  it('rejects non-positive line', () => {
+    expect(() => headingSchema.parse({ text: 'h', level: 1, line: 0 })).toThrow();
+    expect(() => headingSchema.parse({ text: 'h', level: 1, line: -3 })).toThrow();
+  });
+
+  it('rejects non-integer line', () => {
+    expect(() => headingSchema.parse({ text: 'h', level: 1, line: 1.5 })).toThrow();
+  });
+});
+
 describe('documentSchema', () => {
-  it('accepts a valid document', () => {
+  it('accepts a valid document with headings', () => {
+    expect(() =>
+      documentSchema.parse({
+        text: 'hello',
+        title: 'Hi',
+        sourceUrl: 'https://example.com/',
+        headings: [
+          { text: 'Intro', level: 1, line: 1 },
+          { text: 'Details', level: 2, line: 5 }
+        ]
+      })
+    ).not.toThrow();
+  });
+
+  it('accepts a document with an empty headings array', () => {
+    expect(() =>
+      documentSchema.parse({
+        text: 'hello',
+        title: 'Hi',
+        sourceUrl: 'https://example.com/',
+        headings: []
+      })
+    ).not.toThrow();
+  });
+
+  it('rejects a document missing headings (required, no default)', () => {
     expect(() =>
       documentSchema.parse({
         text: 'hello',
         title: 'Hi',
         sourceUrl: 'https://example.com/'
       })
-    ).not.toThrow();
+    ).toThrow();
   });
 
   it('rejects non-URL sourceUrl', () => {
-    expect(() => documentSchema.parse({ text: '', title: '', sourceUrl: 'not a url' })).toThrow();
+    expect(() =>
+      documentSchema.parse({ text: '', title: '', sourceUrl: 'not a url', headings: [] })
+    ).toThrow();
+  });
+
+  it('rejects an invalid heading inside headings', () => {
+    expect(() =>
+      documentSchema.parse({
+        text: 'hello',
+        title: 'Hi',
+        sourceUrl: 'https://example.com/',
+        headings: [{ text: 'bad', level: 9, line: 1 }]
+      })
+    ).toThrow();
   });
 });
 
@@ -78,6 +150,7 @@ describe('extractResponseSchema', () => {
         text: 'doc',
         title: 'Title',
         sourceUrl: 'https://example.com/',
+        headings: [],
         byteSize: 3,
         scan: { safe: true, threats: [] }
       })
@@ -90,6 +163,7 @@ describe('extractResponseSchema', () => {
         text: 'doc',
         title: 'Title',
         sourceUrl: 'https://example.com/',
+        headings: [{ text: 'Intro', level: 1, line: 1 }],
         byteSize: 3,
         scan: {
           safe: false,

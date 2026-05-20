@@ -48,7 +48,12 @@
       }
       state = {
         kind: 'ready',
-        document: { text: preview.text, title: preview.title, sourceUrl: preview.sourceUrl }
+        document: {
+          text: preview.text,
+          title: preview.title,
+          sourceUrl: preview.sourceUrl,
+          headings: preview.headings
+        }
       };
     } catch (err) {
       state = { kind: 'extract-error', message: 'Network error: ' + String(err) };

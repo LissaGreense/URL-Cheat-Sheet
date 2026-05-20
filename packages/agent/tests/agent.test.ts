@@ -53,7 +53,8 @@ describe('streamChat', () => {
   const document: Document = {
     text: 'hello world',
     title: 'doc',
-    sourceUrl: 'https://example.com/doc'
+    sourceUrl: 'https://example.com/doc',
+    headings: []
   };
 
   beforeEach(() => {
