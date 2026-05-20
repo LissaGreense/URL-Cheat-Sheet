@@ -8,37 +8,17 @@ const HEADING_SELECTOR = 'h1, h2, h3, h4, h5, h6';
 export type ExtractResult = { text: string; title: string; headings: Heading[] };
 export type ExtractError = { kind: 'EMPTY_EXTRACTION' } | { kind: 'PARSE_FAILED' };
 
-/**
- * Collapse runs of whitespace to a single space, trim, and lowercase.
- * Used for normalized comparison between heading element text (which may
- * contain internal newlines or non-breaking spaces) and body lines.
- */
 function normalize(s: string): string {
   return s.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 /**
- * Re-parse the HTML article body produced by Readability and resolve each
- * heading element (h1–h6) to its line number in `textContent`.
+ * Resolve each h1-h6 in `contentHtml` to its line number in `textContent`.
  *
- * Algorithm (deliberately conservative — never mutates `textContent`):
- *   1. Iterate `h1..h6` elements in document order.
- *   2. Normalize the heading's `textContent`. Skip empty headings.
- *   3. Walk `textContent.split('\n')` from a running cursor (starts at 0).
- *      For each heading, find the first body-line index `i >= cursor`
- *      whose normalized form *includes* the normalized heading text.
- *      Record `{ text: <original>, level, line: i + 1 }` and advance the
- *      cursor to `i + 1`. Skip headings that can't be located.
- *
- * The cursor invariant guarantees that headings are assigned to lines in
- * document order — a later heading whose text also appears earlier in the
- * body cannot be mis-attributed to that earlier line, because a prior
- * heading has already consumed it (or the cursor has otherwise moved
- * past it).
- *
- * @param contentHtml HTML string from `Readability.parse().content`.
- * @param textContent Plain-text article body (Readability `textContent`).
- * @returns Heading[] — empty when `contentHtml` has no headings.
+ * The cursor invariant matters: each heading consumes a line, then the
+ * search resumes past it. Without this, a later heading whose text also
+ * appears earlier in the body would be mis-attributed to that earlier
+ * line. Never mutates `textContent`.
  */
 export function extractHeadings(contentHtml: string, textContent: string): Heading[] {
   let doc: Document;
@@ -62,8 +42,6 @@ export function extractHeadings(contentHtml: string, textContent: string): Headi
     const norm = normalize(original);
     if (!norm) continue;
 
-    // Skip headings that produced an empty original after trimming (text
-    // would fail `z.string().min(1)`).
     if (!original) continue;
 
     let foundAt = -1;
@@ -88,10 +66,6 @@ export function extractHeadings(contentHtml: string, textContent: string): Headi
  * Parse HTML, run Readability, return clean main-content text and the page
  * title. Returns ExtractError if Readability can't produce a meaningful
  * extract (SPA shells, malformed documents).
- *
- * The returned `headings` array is a sidecar resolved from
- * `article.content` (HTML) — `text` derivation is byte-identical to the
- * pre-sidecar implementation. Existing Lxx citations remain stable.
  */
 export function extractContent(html: string, sourceUrl: string): ExtractResult | ExtractError {
   let document: Document;
@@ -101,8 +75,7 @@ export function extractContent(html: string, sourceUrl: string): ExtractResult |
     return { kind: 'PARSE_FAILED' };
   }
 
-  // Inject <base href> so Readability resolves relative URLs against the
-  // source URL.
+  // <base href> so Readability resolves relative URLs against the source.
   let head = document.querySelector('head');
   if (!head) {
     head = document.createElement('head');
@@ -112,12 +85,10 @@ export function extractContent(html: string, sourceUrl: string): ExtractResult |
   base.setAttribute('href', sourceUrl);
   head.prepend(base);
 
-  // linkedom's Document exposes the surface Readability needs; cast across
-  // the type boundary.
+  // linkedom's Document exposes the surface Readability needs; cast across.
   const article = new Readability(document as unknown as Document).parse();
-  // Readability returns null when the document has no extractable main
-  // content (e.g. SPA shells). Treat that as EMPTY_EXTRACTION rather than
-  // PARSE_FAILED — the HTML parsed fine, there just isn't an article.
+  // Null = no extractable main content (SPA shells); HTML parsed fine so
+  // EMPTY_EXTRACTION, not PARSE_FAILED.
   if (!article || !article.textContent) {
     return { kind: 'EMPTY_EXTRACTION' };
   }

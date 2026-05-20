@@ -2,18 +2,12 @@ import { tool } from 'ai';
 import { z } from 'zod';
 
 /**
- * `finalize` — client-side sentinel tool that closes the agent's turn.
- *
- * Defined intentionally **without** an `execute` function: this is the
- * v6 "client-side tool" pattern (see JSDoc in
- * `@ai-sdk/provider-utils/dist/index.d.ts:1038`). The model emits a
- * tool call, the SDK forwards it to the client as a `tool-input-available`
- * chunk, and the agent's `stopWhen: hasToolCall('finalize')` halts the
- * loop without ever invoking server code.
- *
- * The result: empty assistant output becomes impossible by design — the
- * model can only end its turn by calling `finalize` with a non-empty
- * `answer`, enforced by the Zod `.min(1)` constraint.
+ * Sentinel tool that closes the agent's turn. `stopWhen: hasToolCall(
+ * 'finalize')` halts the loop the moment the model calls this. The
+ * `execute` is a trivial echo and MUST stay: without a tool result in
+ * the assistant message, `convertToModelMessages` throws
+ * `AI_MissingToolResultsError` on the next turn against the unresolved
+ * call.
  */
 export const finalize = tool({
   description:
@@ -21,5 +15,6 @@ export const finalize = tool({
   inputSchema: z.strictObject({
     answer: z.string().min(1),
     citations: z.array(z.string()).default([])
-  })
+  }),
+  execute: async (input) => input
 });

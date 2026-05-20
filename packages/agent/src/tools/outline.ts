@@ -3,11 +3,9 @@ import { z } from 'zod';
 import type { Heading } from '@url-cheat-sheet/schemas';
 
 /**
- * Factory: builds an `outline` AI SDK tool that closes over the document's
- * pre-extracted headings. `documentText` is accepted for parity with
- * `makeGrepDoc(documentText)` so call sites can pass document context
- * uniformly; it is intentionally unused here because the heading list is
- * already structured.
+ * `_documentText` is unused — the heading list is already structured — but
+ * accepted for signature parity with `makeGrepDoc`/`makeReadLines` so call
+ * sites pass document context uniformly.
  */
 export function makeOutline(_documentText: string, headings: Heading[]) {
   return tool({
