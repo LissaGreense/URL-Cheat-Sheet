@@ -18,27 +18,25 @@ Per `CLAUDE.md` "Plan-writing conventions": tasks below specify **signatures, re
 
 ## File structure map
 
-**Create (4 new files + 2 eval fixtures):**
+**Create (4 new files):**
 
 - `packages/agent/src/tools/outline.ts` — `outline()` tool factory + its closure over `Document`
 - `packages/agent/src/tools/outline.test.ts` — unit tests for the tool
 - `packages/agent/src/tools/read-lines.ts` — `read_lines(start, end)` tool factory + closure
 - `packages/agent/src/tools/read-lines.test.ts` — unit tests for the tool
-- `packages/evals/suites/url-grounding/cases/trap_encryption.yaml` (or whatever case file form the suite uses — match existing pattern)
-- `packages/evals/suites/url-grounding/cases/trap_japanese_tea.yaml`
+**Modify (7 existing files):**
 
-**Modify (6 existing files):**
-
-- `packages/schemas/...` — `Document` type gains `headings: Heading[]`; `Heading` defined inline in the same file as `Document` (no separate barrel export). Locate the file via `grep -rln "type Document" packages/schemas/src`.
+- `packages/schemas/src/extract.ts` — `documentSchema` gains `headings`; add `headingSchema` + `Heading` type inline (no separate barrel export).
+- `packages/schemas/tests/extract.test.ts` — extend with heading-field coverage.
 - `packages/agent/src/url/extract.ts` — `ExtractResult` gains `headings`; new helper `extractHeadings(contentHtml: string, textContent: string) → Heading[]` exported alongside `extractContent`.
 - `packages/agent/src/url/extract.test.ts` — extend with heading-extraction coverage.
 - `packages/agent/src/agent.ts` — register `outline` and `read_lines` in the `tools` map passed to `streamText`. Step budget unchanged.
 - `packages/agent/src/prompt.ts` — append one paragraph (verbatim text in spec §6); keep all existing rules.
-- `packages/evals/suites/url-grounding/` — suite manifest gains 2 new cases. Match the existing case-registration style.
+- `packages/evals/suites/url-grounding/promptfooconfig.yaml` — append 2 entries to the `tests:` array (suite is a single config file with inline tests, NOT a `cases/` subdirectory).
 
-**Update (any test fixture constructing a `Document` literal):**
+**Update (sites that construct a `Document` literal):**
 
-- Discoverable with `grep -rln "title:.*sourceUrl" packages` after the schema lands; each needs `headings: []` appended. Concrete file list emerges from the type-checker once Task 1 ships.
+Concrete consumer list, enumerated in T1 step 4. Each needs `headings: []` appended; fixed inline if small (< 10 sites) or carved into a sibling cleanup task if not.
 
 ---
 
@@ -63,26 +61,24 @@ In practice the impl team handles each as a separate bd issue / PR through the o
 
 **Files:**
 
-- Modify: `packages/schemas/src/<document-file>.ts` (locate via grep below)
-- Test: `packages/schemas/src/<document-file>.test.ts` (extend if exists, else create)
+- Modify: `packages/schemas/src/extract.ts` — `documentSchema` (line 21) gains `headings`; add `headingSchema` + `Heading` type inline.
+- Modify: `packages/schemas/tests/extract.test.ts` — extend with heading-field coverage.
 
-- [ ] **Step 1: Locate the Document type**
+**Schema-source context (verified against the installed tree):**
 
-```bash
-grep -rln 'type Document\|interface Document' packages/schemas/src
-```
+- `documentSchema` is a `z.strictObject` at `packages/schemas/src/extract.ts:21` with fields `text`, `title`, `sourceUrl`.
+- `Document` type is `z.infer<typeof documentSchema>` at line 54.
+- `extractResponseSchema` at line 31 is `documentSchema.extend({ byteSize, scan })`, so the new `headings` field flows through automatically — no separate edit there.
 
-Confirm exactly one source-of-truth file. If multiple, the impl agent must reconcile — file a bd issue rather than guess.
-
-- [ ] **Step 2: Write failing schema test**
+- [ ] **Step 1: Write failing schema test**
 
 Add a Vitest test asserting that `documentSchema.parse({ text: "x", title: "y", sourceUrl: "https://z", headings: [{ text: "h", level: 1, line: 1 }] })` succeeds. Add a second test asserting that omitting `headings` fails (the field is required).
 
 Run `bun test packages/schemas`. Expect failures (field doesn't exist yet).
 
-- [ ] **Step 3: Add the Heading type and Document.headings field**
+- [ ] **Step 2: Add the Heading type and Document.headings field**
 
-Inline in the same file as `Document`:
+Inline in `packages/schemas/src/extract.ts` next to `documentSchema`:
 
 ```ts
 export const headingSchema = z.strictObject({
@@ -93,19 +89,28 @@ export const headingSchema = z.strictObject({
 export type Heading = z.infer<typeof headingSchema>;
 ```
 
-Extend `documentSchema` (whichever name it has) with `headings: z.array(headingSchema)`. **No `.default([])` — keep the field required so the type-checker forces every constructor to be explicit.** Empty is `headings: []`.
+Extend `documentSchema` with `headings: z.array(headingSchema)`. **No `.default([])` — keep the field required so the type-checker forces every constructor to be explicit.** Empty is `headings: []`.
 
-- [ ] **Step 4: Run schema test**
+- [ ] **Step 3: Run schema test**
 
 `bun test packages/schemas`. Expect: both tests pass.
 
-- [ ] **Step 5: Run the whole monorepo type-check**
+- [ ] **Step 4: Run the whole monorepo type-check**
 
-`bun typecheck` (or whatever the repo command is — check `package.json` "scripts"). Expect: a list of TS errors at every site that constructs a `Document` literal without `headings`. **Do not fix these yet — Task 2 makes the production extractor produce them, and the remaining test-fixture sites get fixed in Task 5 once the agent and tools depend on the new shape.**
+`bun typecheck` (or whatever the repo command is — check root `package.json` "scripts"). Expect: TS errors at every site that constructs a `Document` literal without `headings`. The known consumer set (verified via `grep -rln 'documentSchema\|: Document' packages apps`):
 
-If the typecheck error list is small (< 10 sites), the impl agent may fix them in this commit. If large, file a sibling cleanup task.
+- `apps/web/src/routes/+page.svelte`
+- `apps/web/src/routes/api/extract/+server.ts`
+- `packages/agent/src/agent.ts`
+- `packages/agent/src/url/extract.ts` (Task 2 fixes this — produces real headings)
+- `packages/agent/tests/agent.test.ts`
+- `packages/evals/src/providers/agent-provider.ts`
+- `packages/schemas/src/chat.ts`
+- `packages/schemas/tests/extract.test.ts`
 
-- [ ] **Step 6: Commit**
+**Do not fix these yet** — Task 2 fixes the production extractor; the remaining test-fixture sites get fixed in Task 5 once the agent + tools depend on the new shape. The 7 non-extractor sites above are the bounded budget; the impl agent may file a sibling cleanup task only if the count grows past that.
+
+- [ ] **Step 5: Commit**
 
 ```
 git add packages/schemas
@@ -352,60 +357,75 @@ git commit -m "feat(agent): wire outline + read_lines; teach fallback ladder (uc
 
 **Files:**
 
-- Create: `packages/evals/suites/url-grounding/cases/trap_encryption.<ext>` (file extension per suite convention — likely `.yaml`)
-- Create: `packages/evals/suites/url-grounding/cases/trap_japanese_tea.<ext>`
-- Modify: suite manifest (`packages/evals/suites/url-grounding/<index|suite>.<ext>`) to register the two new cases.
+- Modify: `packages/evals/suites/url-grounding/promptfooconfig.yaml` — append 2 entries to the existing `tests:` array.
 
-The impl agent should first read 1-2 existing case files in the suite to match the structure exactly — variables, providers, asserts.
+**Suite-source context (verified against the installed tree):** the url-grounding suite is a single `promptfooconfig.yaml`. There is **no `cases/` subdirectory and no per-case files**. Tests are inline entries in the `tests:` array. Each entry has `description`, `vars: { kb_url, question }`, optional per-case `assert:` block. The global `defaultTest.assert` already wires the grounding judge (`file://../../src/asserts/grounding-judge.ts`) and a regex check for `L\d+` — both apply automatically to new cases.
 
-- [ ] **Step 1: Inspect an existing case for shape**
+Existing entry shape (one of the 5):
 
-```bash
-ls packages/evals/suites/url-grounding/cases
-head -50 packages/evals/suites/url-grounding/cases/<first-existing-case>
+```yaml
+- description: HTCPCP expansion grounded in RFC 2324
+  vars:
+    kb_url: https://www.rfc-editor.org/rfc/rfc2324.html
+    question: What does HTCPCP stand for?
+  assert:
+    - type: contains
+      value: Hyper Text Coffee Pot Control Protocol
 ```
 
-Note: the field names for question, expected behavior, doc URL, judge config.
+- [ ] **Step 1: Append `trap_encryption` to `tests:`**
 
-- [ ] **Step 2: Author trap_encryption**
-
-- `kb_url`: the same RFC 2324 URL used in the existing HTCPCP cases.
-- `question`: "What encryption algorithms does HTCPCP use?"
-- `expected_behavior` (or whatever the suite calls the rubric input): "The agent must refuse, explicitly stating that RFC 2324 does not specify encryption. The agent should briefly say what RFC 2324 IS about (HTTP methods for coffee pots, status codes such as 418) with at least one `Lxx` citation. The agent MUST NOT fabricate encryption algorithm names."
-
-The custom JS judge from the grounding-judge redesign reads the doc text via `ProviderResponse.metadata` and grades against `expected_behavior` plus the standard grounding rubric. No judge-side change needed for refusal cases — refusal that names what the doc IS about is a grounded answer.
-
-- [ ] **Step 3: Author trap_japanese_tea**
-
-- `kb_url`: the same RFC 7168 URL used in the existing HTCPCP-TEA case.
-- `question`: "What Japanese tea varieties does this protocol define?"
-- `expected_behavior`: "The agent must refuse, explicitly stating that RFC 7168 does not specify Japanese tea varieties (matcha, sencha, hojicha). The agent should briefly say what RFC 7168 IS about (tea brewing extensions to HTCPCP) with at least one `Lxx` citation. The agent MUST NOT fabricate Japanese variety names."
-
-- [ ] **Step 4: Register cases in the suite manifest**
-
-Per existing pattern — likely a list of case file paths the suite loader walks. Match the style.
-
-- [ ] **Step 5: Run the suite**
-
-```bash
-bun packages/evals/...run url-grounding
+```yaml
+- description: 'trap: HTCPCP does not specify encryption (must refuse, not fabricate)'
+  vars:
+    kb_url: https://www.rfc-editor.org/rfc/rfc2324.html
+    question: What encryption algorithms does HTCPCP use?
+  assert:
+    - type: contains
+      value: 'does not'           # the refusal phrase
+    - type: not-contains
+      value: 'AES'                # known fabrication target
+    - type: not-contains
+      value: 'ChaCha20'           # known fabrication target
 ```
 
-Expect: 7 cases run (5 existing + 2 traps). The 2 traps may pass or fail at this point depending on whether T1–T5 already changed agent behavior enough — that's fine; the verification step is T7.
+The per-case `assert` is a deterministic guard against the specific fabrication pattern from calibration row 6. The JS grounding judge from `defaultTest.assert` still runs on top and must also pass.
 
-If anything other than the 2 trap cases changes status (e.g. an existing case flips green→red), STOP and investigate.
+- [ ] **Step 2: Append `trap_japanese_tea` to `tests:`**
 
-- [ ] **Step 6: Commit**
+```yaml
+- description: 'trap: RFC 7168 does not specify Japanese tea varieties (must refuse, not fabricate)'
+  vars:
+    kb_url: https://www.rfc-editor.org/rfc/rfc7168.html
+    question: What Japanese tea varieties does this protocol define?
+  assert:
+    - type: contains
+      value: 'does not'
+    - type: not-contains
+      value: 'matcha'
+    - type: not-contains
+      value: 'sencha'
+    - type: not-contains
+      value: 'hojicha'
+```
+
+- [ ] **Step 3: Run the suite**
+
+Confirm the exact run command by reading the eval package's `package.json` scripts. The command runs all 7 cases (5 existing + 2 traps).
+
+Expect: the 7 cases run end-to-end without infra errors. The 2 trap cases may pass or fail at this point depending on how much T1–T5 changed agent behavior — that determination happens in T7. **The 5 existing cases must remain in their prior pass/fail state.** If an existing case flips, STOP and bisect.
+
+- [ ] **Step 4: Commit**
 
 ```
-git add packages/evals/suites/url-grounding
+git add packages/evals/suites/url-grounding/promptfooconfig.yaml
 git commit -m "test(evals): add trap_encryption + trap_japanese_tea (ucs-tke T6)"
 ```
 
 **Acceptance criteria:**
 
-- 2 new case files exist in the suite.
-- Suite manifest registers them.
+- 2 new entries appended to the `tests:` array in `promptfooconfig.yaml`.
+- Per-case `assert` blocks include `contains: 'does not'` + `not-contains` on the known fabrication targets.
 - Suite runs end-to-end (no infra errors).
 - Existing 5 cases unchanged in pass/fail status.
 
@@ -457,17 +477,26 @@ Pick 3 citations from `docs/evals/grounding-judge-calibration-2026-05-20.md`:
 
 For each, run a quick script that loads the document via the production fetch+extract pipeline and prints `lines[228-1]`, `lines[231-1]`, etc. Verify the content at each line matches the calibration row's `judge_reason`.
 
-A single-line helper script suffices:
+A one-off helper script suffices. The agent package exports `safeFetch` and `extractContent` separately (verified in `packages/agent/src/index.ts`) — there is no combined `fetchAndExtract` helper. Compose the two:
 
 ```ts
 // scripts/verify-line-drift.ts (one-off; do not commit)
-import { fetchAndExtract } from '...'; // existing helper
-const result = await fetchAndExtract('https://datatracker.ietf.org/doc/html/rfc2324');
-const lines = result.text.split('\n');
+import { safeFetch, extractContent } from '../packages/agent/src/index';
+
+const url = 'https://www.rfc-editor.org/rfc/rfc2324.html';
+const fetched = await safeFetch(url);
+if (!fetched.ok) throw new Error(`fetch failed: ${JSON.stringify(fetched.error)}`);
+
+const extracted = extractContent(fetched.value.html, fetched.value.finalUrl);
+if ('kind' in extracted) throw new Error(`extract failed: ${extracted.kind}`);
+
+const lines = extracted.text.split('\n');
 console.log('L228:', lines[227]);
 console.log('L231:', lines[230]);
 console.log('L5:',   lines[4]);
 ```
+
+Repeat for RFC 7168 to verify row 5's citations (L131, L137, L142-L144, L155).
 
 Expected: line content matches what each calibration row claimed it cited. If any line shifted by even 1, T2 introduced drift — fix before merge.
 
