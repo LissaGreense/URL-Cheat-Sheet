@@ -202,4 +202,61 @@ describe('FinalizeScan', () => {
     });
     expect(container.querySelector('.status-pill')!.textContent?.trim()).toBe('[ COMPILING ]');
   });
+
+  it('renders a .compile-bar child so assembleCascade has a target', () => {
+    const { container } = render(FinalizeScan, {
+      props: { part: fakePart({ state: 'input-streaming', answer: 'streaming...' }) }
+    });
+    expect(container.querySelector('.compile-bar')).not.toBeNull();
+  });
+
+  it('renders a .finalize__content text container so the per-line observer can wire up', () => {
+    const { container } = render(FinalizeScan, {
+      props: { part: fakePart({ state: 'input-streaming', answer: 'a' }) }
+    });
+    expect(container.querySelector('.finalize__content')).not.toBeNull();
+  });
+
+  it('renders each answer line as a .finalize__line element (final state)', () => {
+    const { container } = render(FinalizeScan, {
+      props: {
+        part: fakePart({
+          state: 'input-available',
+          answer: 'line one\nline two\nline three'
+        })
+      }
+    });
+    const lines = container.querySelectorAll('.finalize__line');
+    expect(lines.length).toBe(3);
+    expect(lines[0]!.textContent).toBe('line one');
+    expect(lines[2]!.textContent).toBe('line three');
+  });
+
+  it('renders completed lines + a separate live tail during input-streaming', () => {
+    // Mid-stream: one full newline-terminated line + a still-growing tail.
+    // The per-line scramble should target only the FINAL nodes, not the
+    // mutating tail. Asserted via class separation.
+    const { container } = render(FinalizeScan, {
+      props: {
+        part: fakePart({
+          state: 'input-streaming',
+          answer: 'line one\nhalf-stre'
+        })
+      }
+    });
+    const lines = container.querySelectorAll('.finalize__line');
+    expect(lines.length).toBe(1);
+    expect(lines[0]!.textContent).toBe('line one');
+    const tail = container.querySelector('.finalize__tail');
+    expect(tail).not.toBeNull();
+    expect(tail!.textContent).toBe('half-stre');
+  });
+
+  it('exposes part.state via data-state on the host for failure / cancellation CSS', () => {
+    const { container } = render(FinalizeScan, {
+      props: { part: fakePart({ state: 'output-error' }) }
+    });
+    const host = container.querySelector('.finalize');
+    expect(host?.getAttribute('data-state')).toBe('output-error');
+  });
 });
