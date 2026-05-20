@@ -116,9 +116,9 @@ with a fresh `describe('chatRequestSchema')`):
 
 **Interface change**
 - Current: `streamChat(messages: UIMessage[], document: Document): Promise<Response>`
-- New: `streamChat(messages: UIMessage[], document: Document, apiKey: string): Promise<Response>`
-- The `apiKey` argument is required (no default). Callers always
-  supply it.
+- New: `streamChat(messages: UIMessage[], document: Document, apiKey: string, abortSignal?: AbortSignal): Promise<Response>`
+- `apiKey` is required (no default). `abortSignal` is optional but
+  the route always passes `event.request.signal`.
 
 **Implementation guidance**
 - Replace the module-level `import { anthropic } from '@ai-sdk/anthropic'`
@@ -130,6 +130,19 @@ with a fresh `describe('chatRequestSchema')`):
 - Pass `provider('claude-sonnet-4-6')` to `streamText`'s `model`
   option. Everything else (`SYSTEM_PROMPT`, tools, `stopWhen`,
   `temperature: 0`) is unchanged.
+- Pass `abortSignal` into `streamText({ abortSignal })`. When the
+  client navigates away or aborts, the signal propagates through
+  to the Anthropic fetch and stops billing.
+- Pass an `onError` handler into `streamText` that logs a redacted
+  summary (e.g., `{ kind: 'streamText.error', statusCode: err.statusCode }`)
+  and **never** calls `console.*` with `err.responseBody` or any
+  object that may transitively contain the request body.
+- Pass an `onError` into `result.toUIMessageStreamResponse({ onError })`
+  that returns a fixed string — `'Upstream provider error'` — for
+  every error. The default behavior (`String(err)`) could splash
+  the provider's error body, which may echo the request payload.
+  Locking to a fixed string makes in-stream errors safe regardless
+  of what Anthropic returns.
 - Do **not** add the `anthropic-dangerous-direct-browser-access`
   header — this call runs server-side; the header is for direct-
   browser calls only and we are explicitly not using that path
@@ -187,15 +200,40 @@ with a fresh `describe('chatRequestSchema')`):
 **Interface change**
 - Remove the `process.env['ANTHROPIC_API_KEY']` check (current lines
   25–27 of `+server.ts`).
-- Call `streamChat(parsed.data.messages as UIMessage[], parsed.data.document, parsed.data.apiKey)`.
-- Wrap the `streamChat` call in a try/catch that maps Anthropic
-  errors to shaped JSON responses **without echoing the key or the
-  raw request body** in any response:
-  - `AuthenticationError` (401) → `{ error: 'API key rejected by provider' }`, status 401.
-  - `RateLimitError` (429) → `{ error: 'Provider rate limit or quota exceeded' }`, status 429.
-  - Any other Anthropic error → `{ error: 'Upstream provider error' }`, status 502.
-  - Non-Anthropic exceptions re-throw (let SvelteKit's default
-    handler 500).
+- The handler signature receives the full SvelteKit `RequestEvent`;
+  destructure both `request` and `request.signal` (for abort
+  propagation, per Task 2).
+- Call `streamChat(parsed.data.messages as UIMessage[], parsed.data.document, parsed.data.apiKey, request.signal)`.
+- Wrap the `streamChat` call in a try/catch that maps the AI SDK's
+  error classes to shaped JSON responses **without echoing the key
+  or the raw request body** in any response. Verified against
+  installed source `node_modules/.bun/@ai-sdk+provider@3.0.10/...`:
+  the error classes live in `@ai-sdk/provider` and are re-exported
+  from `ai`. Use:
+  ```ts
+  import { APICallError, LoadAPIKeyError } from 'ai';
+  ```
+  Branch logic:
+  - `APICallError.isInstance(err)` and `err.statusCode === 401`
+    → `401 { error: 'API key rejected by provider' }`
+  - `APICallError.isInstance(err)` and `err.statusCode === 429`
+    → `429 { error: 'Provider rate limit or quota exceeded' }`
+  - `APICallError.isInstance(err)` for any other status (including
+    `undefined`) → `502 { error: 'Upstream provider error' }`
+  - `LoadAPIKeyError.isInstance(err)` → `400 { error: 'API key missing or malformed' }`
+    (handles the edge where the schema is loosened and an empty
+    `apiKey` reaches the provider — defense in depth)
+  - Anything else re-throws (lets SvelteKit's default handler 500).
+
+  The `.isInstance` static methods use Symbol-based markers that
+  work across realms (verified in `@ai-sdk/provider/dist/index.d.ts:391-417`);
+  prefer them over `instanceof`. **The class names
+  `AuthenticationError` / `RateLimitError` / `BadRequestError`
+  do NOT exist in `@ai-sdk/anthropic` or `ai` — do not import them.**
+
+  Note that errors thrown *after* `streamText` has started
+  streaming surface as in-stream `error` parts, not synchronously.
+  Those are handled by the `onError` overrides in Task 2, not here.
 
 **Acceptance criteria**
 - The handler returns 400 with a structured `issues` array when
@@ -207,22 +245,21 @@ with a fresh `describe('chatRequestSchema')`):
   body, or any substring matching `/sk-ant-/`.
 - No `console.log`, `console.error`, or other logger call receives
   the parsed body or `apiKey`.
-- The Vercel "Function logs include request body" setting is
-  documented in the deploy README as a step to verify off (no code
-  change required for this; just a docs/README update if a
-  deploy-checklist file exists).
+- Verification that no `console.*` call receives the parsed body
+  or `apiKey`: after deploy, send one known chat request, then
+  grep Vercel runtime logs for the literal `sk-ant-` substring;
+  expected count is zero. (There is no "include request body in
+  logs" Vercel setting — that's a misconception in earlier drafts.
+  Vercel never logs bodies by default; the only leak path is our
+  own `console.*` writes.)
 
 **Library calls**
 - `chatRequestSchema.safeParse` (unchanged).
-- `streamChat` (Task 2 signature).
+- `streamChat` (Task 2 signature, now with `request.signal` as
+  the 4th argument).
 - `json` from `@sveltejs/kit` (unchanged).
-- Anthropic error classes: import error types from `@ai-sdk/anthropic`
-  or `@anthropic-ai/sdk` — find which package exports
-  `AuthenticationError` / `RateLimitError` by checking
-  `node_modules/.../dist/index.d.ts` of both. If neither exposes
-  named error classes, fall back to inspecting `error.statusCode`
-  on a generic `Error` (do not type as `any`; type as `unknown`
-  with a narrow check).
+- `APICallError` and `LoadAPIKeyError` from `ai` (re-exported from
+  `@ai-sdk/provider`). Use `.isInstance(err)` for the discriminator.
 
 **Test scenarios** (`apps/web/tests/chat-route.test.ts`)
 
@@ -410,27 +447,39 @@ using `@testing-library/svelte` already in devDependencies)
 
 **Client-side error handling (per spec § Error taxonomy)**
 
-The `@ai-sdk/svelte` `Chat` client surfaces transport errors via
-`chat.error` (a reactive store/rune; check the installed v4 API in
-`node_modules/@ai-sdk/svelte/dist/index.d.ts`). Wire up handling so
-that when a chat send returns:
+Verified against installed source (`ai/dist/index.d.ts:3766,3878`):
+the `@ai-sdk/svelte` `Chat` client exposes `chat.error: Error | undefined`
+and `chat.status: 'submitted' | 'streaming' | 'ready' | 'error'`. The
+`error` is a plain `Error`; the HTTP status code is **not** directly
+exposed via the type. To branch on status without threading a custom
+`fetch` through `DefaultChatTransport`, parse `chat.error.message`
+against the exact strings the server returns from Task 3.
 
-- **401** — open the settings drawer, set `apiKey = null` (forces
-  re-entry), and focus the key input. Show inline error in the
-  drawer: *"Your key was rejected by Anthropic. Check it's still
-  active in your provider dashboard."*
-- **429 or 502** — surface a toast or inline message above the
-  composer: *"Provider rate limit or quota exceeded — check your
-  Anthropic spend limits"* (429) or *"Upstream provider error"*
-  (502). Do **not** clear `apiKey` — the key is valid.
-- **Any other 4xx/5xx** — generic error message above the composer.
+Match against `chat.error.message`:
 
-The `SettingsDrawer` component (Task 4) takes a single
-`apiKey: string | null` prop. To support the "open + focus on 401"
-flow, the page passes the drawer's open/closed state and a focus
-flag down — either as additional props or via an exposed method
-on the drawer. Pick whichever is more idiomatic; Svelte 5 favors
-prop-driven over imperative refs.
+- contains `'API key rejected by provider'` → open the settings
+  drawer, set `apiKey = null`, focus the key input. Show inline
+  error in the drawer: *"Your key was rejected by Anthropic. Check
+  it's still active in your provider dashboard."*
+- contains `'Provider rate limit or quota exceeded'` → surface an
+  inline message above the composer: *"Provider rate limit or
+  quota exceeded — check your Anthropic spend limits."* Do **not**
+  clear `apiKey`.
+- contains `'API key missing or malformed'` → same flow as the
+  401 branch (forces re-entry).
+- contains `'Upstream provider error'` (or anything else) → generic
+  inline message above the composer.
+
+The page reads `chat.error` reactively (`$derived` rune) and routes
+to one of those branches via a `$effect`. The drawer-open + focus
+plumbing is handled via a `drawerOpen = $state(false)` rune in the
+page; on a 401 the `$effect` sets `apiKey = null`, `drawerOpen = true`,
+then `tick()` + focus the input ref.
+
+**Important:** matching on message-string substrings is fragile if
+the server response shape ever changes. Task 3's response shapes
+are the *contract*; the strings above are normative. If they
+change, both Task 3 and Task 5 must update together.
 
 **Acceptance criteria**
 - A fresh page load shows `apiKey === null` and the composer is
@@ -506,9 +555,12 @@ kit: {
 - `script-src: ['self']` (plus `'unsafe-eval'` only in dev — guard
   with `process.env.NODE_ENV !== 'production'`)
 - `style-src: ['self', 'unsafe-inline']`
-- `connect-src: ['self']` — note `'self'` is sufficient; the browser
-  does not directly contact `api.anthropic.com` in this
-  architecture.
+- `connect-src: ['self']` in production. **In dev**, also include
+  `'ws:'` and `'wss:'` so Vite's HMR websocket can connect; gate
+  the relaxation with the same `process.env.NODE_ENV !== 'production'`
+  check used for `'unsafe-eval'`. Note `'self'` is sufficient at
+  runtime; the browser does not directly contact `api.anthropic.com`
+  in this architecture.
 - `img-src: ['self', 'data:']`
 - `font-src: ['self']`
 - `frame-ancestors: ['none']`
@@ -592,11 +644,37 @@ kit: {
       send a message. The error response does **not** echo the key.
       Network tab confirms response body contains no `sk-ant-`
       substring.
+- [ ] **7.11** **Build-output runtime identifier check.** After
+      `bun --filter @url-cheat-sheet/web build`, run
+      `rg -n 'runtime' apps/web/.vercel/output/functions/*.func/.vc-config.json`.
+      Confirm the value matches what ADR 0001 specifies. If the
+      adapter has silently switched, catch it here, not in
+      production.
+- [ ] **7.12** **Mid-stream exception leakage.** Temporarily wire
+      a throw inside a `streamText` `onError` callback (or a tool's
+      `execute`) that includes a fake `sk-ant-leaktest` substring.
+      Send a chat message. Confirm the client-visible error part
+      does **not** contain the substring (the `onError` override
+      from Task 2 returns the fixed `'Upstream provider error'`
+      string regardless of the underlying error). Revert the
+      temporary throw.
+- [ ] **7.13** **Full agent-loop streaming completion.** Trigger
+      a chat turn that exercises the 10-step agent loop (a
+      complex question on a long document). Confirm the stream
+      completes within Vercel's max-duration. If it truncates,
+      file a follow-up `bd` issue for `export const config = { maxDuration: ... }`
+      or for lowering `stepCountIs`; do **not** silently raise
+      the cap during this task.
+- [ ] **7.14** **Abort propagation.** Start a chat turn, then
+      close the browser tab while the response is streaming.
+      Confirm in Vercel logs (or local preview console) that the
+      function exits early — not after a timeout. The
+      `AbortSignal` plumbing from Task 2 is what makes this work.
 
 **Steps**
-- [ ] **7.11** Run through 7.1–7.10. Note any failures.
-- [ ] **7.12** If all pass, no commit (verification only).
-- [ ] **7.13** If any fail, file as a follow-up `bd` issue
+- [ ] **7.15** Run through 7.1–7.14. Note any failures.
+- [ ] **7.16** If all pass, no commit (verification only).
+- [ ] **7.17** If any fail, file as a follow-up `bd` issue
       (`bd create --type=bug --priority=2`) referencing the
       smoke-test step that failed. Do **not** silently fix during
       this task — the failure may indicate a real spec gap.
@@ -609,7 +687,7 @@ kit: {
 - `bun --filter @url-cheat-sheet/web check` clean.
 - `bun test` from repo root clean.
 - Production build succeeds.
-- Manual smoke test 7.1–7.10 all green.
+- Manual smoke test 7.1–7.14 all green.
 - The string `process.env['ANTHROPIC_API_KEY']` does not appear
   anywhere under `apps/web/src/` or `apps/web/tests/` (verify:
   `rg -n "ANTHROPIC_API_KEY" apps/web/`).

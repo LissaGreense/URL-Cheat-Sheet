@@ -62,6 +62,11 @@ streaming UI message protocol all stay.
   `/v1/models`). The first real chat message validates against
   Anthropic; an extra round-trip on save adds latency and creates
   confusing UX when the probe fails for transient network reasons.
+- **Vercel AI Gateway BYOK** (`providerOptions.gateway.byok`). That
+  feature proxies through Vercel's gateway and falls back to system
+  credentials — completely different threat model from what we're
+  building. We call `api.anthropic.com` directly via
+  `@ai-sdk/anthropic` and never traverse the gateway.
 
 ## Architecture
 
@@ -144,10 +149,16 @@ key exists. The operator's commitments in code, enforced by review:
   a `beforeSend` scrubber must redact `apiKey` and the full request
   body. This is called out explicitly in the spec so a future PR can't
   silently undo it.
-- The Vercel project must not enable "Function logs include request
-  body" or equivalent. This is a Vercel UI setting, not a code change;
-  verify once during the initial deploy and re-verify any time the
-  project's logging/observability config changes.
+- **Vercel does not log request bodies by default.** Per Vercel's
+  runtime-logs docs, the platform records request metadata (method,
+  path, status, region, request ID, user agent) and whatever the
+  function code writes via `console.*`. There is no "include request
+  bodies in logs" toggle to disable — the only way the key can land
+  in logs is if our code writes it. Verification: after deploy, send
+  one known chat request, then search runtime logs for the literal
+  `sk-ant-` substring; expected count is zero. Code review enforces
+  that `console.*` is never called with `parsed`, `parsed.data`, or
+  any object that contains `apiKey`.
 - The response to the client must not include the key in error bodies
   (e.g., `400 { error: "Invalid key 'sk-ant-xxx'" }` is forbidden;
   `400 { error: "API key rejected by provider" }` is the correct
@@ -156,6 +167,33 @@ key exists. The operator's commitments in code, enforced by review:
   *inside* the handler, per request. Caching it at module scope
   keyed by `apiKey` (or by anything else) is forbidden — the cache
   itself would become a cross-user leak.
+- **Mid-stream errors must not leak.** Anthropic errors thrown
+  *before* the stream begins (e.g., a 401 on connection) surface
+  synchronously and are caught by the route's try/catch. Errors
+  thrown *after* the response headers have been flushed (e.g.,
+  rate-limit during streaming) become `error` parts in the SSE
+  stream; the AI SDK's default `onError` calls `String(err)`,
+  which could splash `error.responseBody` containing the provider's
+  echoed request payload. We override the default:
+  `streamText({ ..., onError })` for server-side observation (logs
+  a redacted summary; never logs `error.responseBody`), and
+  `result.toUIMessageStreamResponse({ onError: () => 'Upstream provider error' })`
+  for the client-visible stream chunk. The client receives a fixed
+  string regardless of what the provider returned.
+- **`AbortSignal` propagation.** The route passes
+  `event.request.signal` into `streamChat`, which forwards it to
+  `streamText({ abortSignal })`. When the browser navigates away
+  or the user hits Stop, the signal aborts the Anthropic fetch and
+  the handler returns early. Without this wiring, an abandoned
+  stream keeps the function (and the user's spend) alive until
+  the Vercel function timeout.
+- **Tool execution stays scoped to request input.** The two tools
+  (`grep_doc`, `finalize`) execute server-side inside `streamText`.
+  `grep_doc` reads only `document.text` from the per-request body;
+  `finalize` is a structural-output tool with no side effects.
+  Neither tool reads `apiKey`, `process.env`, the filesystem, or
+  the network. Any future tool that wants those resources requires
+  a fresh threat-model review and must be added to this list.
 
 ### Per-request isolation
 
@@ -179,8 +217,19 @@ to module scope, attaching it to `globalThis`, caching the provider).
 Streaming responses hold the handler's async chain open for the
 duration of the agent loop, sometimes tens of seconds. That's fine —
 the open scope belongs to that invocation only. Another request
-streaming in parallel has its own scope. They share a Node process
-but not a closure.
+streaming in parallel has its own scope.
+
+**Runtime caveat: Bun vs. Node fluid concurrency.** Vercel's fluid-
+compute concurrency (where multiple invocations share a single Node
+process) is currently available on Node.js and Python runtimes only,
+not on Bun. Under our current `experimental_bun1.x` runtime,
+concurrent users land on **separate** function instances — the
+closure-isolation argument is doubly true (different instances, and
+different closures within each). If we ever migrate to `nodejs22.x`
+(ADR 0001's fallback), in-process concurrency becomes possible and
+the closure-isolation discipline above stops being mere hygiene and
+becomes safety-normative for cross-user separation. Either way, the
+rules are the same; the consequences of breaking them change.
 
 ## Threat model — honest disclosure
 
@@ -205,6 +254,26 @@ What is not protected:
 - Anthropic offers no per-key IP allowlist or origin restriction (per
   their [API key best practices article](https://support.claude.com/en/articles/9767949-api-key-best-practices-keeping-your-keys-safe-and-secure)).
   A leaked key works from anywhere until revoked.
+- **Vercel platform metadata leaks the region and request ID.** Every
+  response carries `x-vercel-id` (region + invocation ID) and
+  `server: Vercel`. Not a key-leak vector; included here for
+  completeness. Strippable via `vercel.json` `headers` if it ever
+  becomes a concern — not in scope today.
+- **Vercel's 4.5 MB request body limit** is enforced by the platform
+  *before* the handler runs. A request exceeding this gets a
+  `413 FUNCTION_PAYLOAD_TOO_LARGE` straight from the platform; our
+  code does not see it and cannot shape the response. The follow-up
+  bd issue `ucs-14v` will move the size check client-side so the
+  chat client surfaces a useful message before the request leaves
+  the browser.
+- **Vercel function max-duration caps streaming length.** On the Hobby
+  tier the cap is 300 seconds. An agent loop that exceeds this (e.g.,
+  a 10-step `grep_doc` + `finalize` sequence with slow tool calls)
+  has its stream truncated by the platform; the client surfaces a
+  generic stream-closed error. No key-leak risk, but UX impact worth
+  knowing. Mitigation if hit: lower `stepCountIs(10)` or add an
+  explicit `export const config = { maxDuration: ... }` once we have
+  a real number to set.
 
 In-product disclosure (settings panel copy, exact wording in UX
 section below): the user is told (a) the key lives in this browser
