@@ -28,10 +28,15 @@ ships independently.
 - **Existing:** Svelte 5 (runes), SvelteKit 2.60, Vite 8, Zod 4,
   `@ai-sdk/svelte` 4, `@sveltejs/adapter-vercel`
   (`experimental_bun1.x`).
-- **Phase 1 additions:** None — CSS + Svelte only.
+- **Phase 1 additions:** `@fontsource/manrope` (body sans) and
+  `@fontsource/space-grotesk` (display fallback for the proprietary
+  `Protrakt` face named in the spec; if Protrakt is licensed later, it
+  takes the first slot of `--font-display` per spec §2.2). Verify both
+  versions via `npm view` immediately before pinning per
+  [[feedback-verify-versions-via-npm-view]].
 - **Phase 2 additions:** `gsap@^3.15` with `ScrollTrigger`, `SplitText`,
   `ScrambleTextPlugin`, `CustomEase` plugins; `lenis@^1.x` for smooth
-  scroll.
+  scroll. Same `npm view` verification before pinning.
 
 **Project-specific authoring rule (per `using-this-repo` skill):** This
 plan specifies **signatures, acceptance criteria, affected files, and
@@ -132,9 +137,11 @@ chrome. Tool-call cards render with HUD chrome but no scan animation.
 - Create: `apps/web/src/lib/styles/atmosphere.css`
 - Create: `apps/web/src/lib/components/atmosphere/AtmosphereShell.svelte`
 - Create: `apps/web/src/routes/+layout.svelte`
-- Modify: `apps/web/src/app.html` (font preconnect + face declarations
-  for Manrope; Protrakt fallback via `Space Grotesk` from
-  `@fontsource/space-grotesk` if shipping Protrakt is licensing-blocked)
+- Modify: `apps/web/package.json` (add `@fontsource/manrope` and
+  `@fontsource/space-grotesk` to dependencies)
+- Modify: `apps/web/src/app.html` (font preconnect for fontsource CDN
+  if needed; otherwise rely on the fontsource CSS imports from the
+  root layout)
 
 **Interfaces:**
 
@@ -207,10 +214,12 @@ selector in scoped style.
   composition.** Re-run — expect pass.
 - [ ] **Step 6: Create `+layout.svelte` importing the token + atmosphere
   CSS and wrapping children in `<AtmosphereShell>`.**
-- [ ] **Step 7: Update `app.html` with font preconnect + face
-  declarations.** Use `@fontsource/manrope` (workspace dep) for body;
-  display face is `Space Grotesk` via `@fontsource/space-grotesk` if
-  Protrakt licensing not resolved.
+- [ ] **Step 7: Add font deps.** Run
+  `bun add @fontsource/manrope @fontsource/space-grotesk --filter
+  @url-cheat-sheet/web` (after `npm view`-verifying current versions).
+  Import the fontsource CSS once in `+layout.svelte` so the faces are
+  available globally. Update `app.html` only if a custom preconnect is
+  needed (fontsource ships self-hosted faces, so usually unnecessary).
 - [ ] **Step 8: Run full check.** Run
   `bun run --filter @url-cheat-sheet/web check && bun run --filter
   @url-cheat-sheet/web test`. Expect green.
@@ -662,8 +671,14 @@ type Props = { part: ToolUIPart };  // narrow to tool-finalize at runtime
 **Interfaces:**
 
 In `+page.svelte`, add a `$derived` that reads `import.meta.env.DEV`
-and the `$page.url.searchParams.get('state')` to optionally override
-the state for visual review. Production builds ignore the param.
+and the current URL's `state` search param to optionally override the
+state for visual review. Production builds ignore the param.
+
+**SvelteKit 2 + Svelte 5 page API:** Use the modern rune-based API:
+`import { page } from '$app/state'` (NOT `$app/stores`), then access
+`page.url.searchParams.get('state')` directly inside a `$derived(...)`.
+The legacy `$page` store import from `$app/stores` is deprecated and
+should not be added in new code.
 
 Override map:
 ```ts
