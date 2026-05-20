@@ -15,21 +15,32 @@ export interface GrepMatch {
 /**
  * Case-insensitive literal substring search over a line-broken text.
  *
- * Accepts either a single pattern string OR an array of patterns. With an
- * array, a line is a match if it contains ANY of the patterns (logical
- * OR / union). Matches are returned in document order; the `MAX_MATCHES`
- * cap is applied across the union, not per pattern. Line numbers are
- * 1-based. Each match includes up to `CONTEXT_LINES` lines of surrounding
- * context.
+ * `pattern` is a single string. To OR-union multiple synonyms in one
+ * call, separate alternatives with `|` — e.g. `"error|exception|fault"`
+ * matches lines containing ANY of the three terms. Each alternative is
+ * trimmed and lowercased; empty alternatives (from leading/trailing/
+ * consecutive `|`) are discarded. Alternatives beyond `MAX_PATTERNS`
+ * are silently dropped — the schema description steers the model, but
+ * the runtime never rejects.
  *
- * OR semantics added for ucs-0f3: synonym exploration on RFC 7168 was the
- * dominant tool-call sink (the model issued 8+ separate single-pattern
- * greps for {tea, oolong, matcha, hojicha, sencha, ...}). Bundling those
- * into one call collapses 8 round-trips to 1 and leaves the step budget
- * free for navigation + finalize.
+ * Matches are returned in document order; the `MAX_MATCHES` cap is
+ * applied across the union, not per alternative. Line numbers are
+ * 1-based. Each match includes up to `CONTEXT_LINES` lines of context.
+ *
+ * Pipe-alternation replaces the prior `string | string[]` schema (ucs-8nl).
+ * The model consistently produced pipe-joined synonym strings instead of
+ * JSON arrays — the array form was awkward enough that it was effectively
+ * unused. Both forms shared OR semantics; the pipe form just matches what
+ * the model already writes. The OR motivation from ucs-0f3 still stands:
+ * synonym exploration on RFC 7168 was the dominant tool-call sink, and
+ * one pipe-joined call collapses N round-trips to 1.
  */
-export function grepLines(text: string, pattern: string | readonly string[]): GrepMatch[] {
-  const needles = (Array.isArray(pattern) ? pattern : [pattern]).map((p) => p.toLowerCase());
+export function grepLines(text: string, pattern: string): GrepMatch[] {
+  const needles = pattern
+    .split('|')
+    .map((p) => p.trim().toLowerCase())
+    .filter((p) => p.length > 0)
+    .slice(0, MAX_PATTERNS);
   if (needles.length === 0) return [];
 
   const lines = text.split('\n');
@@ -55,19 +66,19 @@ export function grepLines(text: string, pattern: string | readonly string[]): Gr
  * Factory: builds a `grep_doc` AI SDK tool that closes over the provided text.
  * Use one factory call per chat request (closure-captures that request's document).
  *
- * `pattern` accepts either a single string (legacy form) or an array of up
- * to 10 strings (OR union; preferred for synonym exploration — see
- * `grepLines` docstring + ucs-0f3 motivation).
+ * `pattern` is a single string; separate synonyms with `|` for one-shot
+ * OR-union exploration. See `grepLines` docstring + ucs-8nl motivation.
  */
 export function makeGrepDoc(documentText: string) {
   return tool({
     description:
-      'Case-insensitive substring search over document lines, with ±2 lines of context. Returns matching lines labeled Lxx. `pattern` can be a single string OR an array of strings — with an array, a line matches if it contains ANY of the patterns (logical OR). PREFER the array form when exploring synonyms — e.g. `["error","exception","fault"]` in one call beats three sequential calls. Use short distinctive substrings, not full sentences. Empty results mean none of the terms appear in the document; if your initial query and one synonym set both return empty, the topic is not covered — answer honestly.',
+      'Case-insensitive substring search over document lines, with ±2 lines of context. Returns matching lines labeled Lxx. To OR-union multiple synonyms in one call, separate alternatives with `|` — e.g. `"error|exception|fault"` matches lines containing ANY of the three terms. Up to 10 alternatives per call. Use short distinctive substrings, not full sentences. Empty results mean none of the terms appear in the document; if your initial query and one synonym set both return empty, the topic is not covered — answer honestly.',
     inputSchema: z.strictObject({
       pattern: z
-        .union([z.string().min(1), z.array(z.string().min(1)).min(1).max(MAX_PATTERNS)])
+        .string()
+        .min(1)
         .describe(
-          'Case-insensitive substring(s) to search. String for a single term, or an array of up to 10 terms for OR-union exploration of synonyms.'
+          'Case-insensitive substring(s) to search. Single literal phrase, or pipe-separated synonyms for OR-union (e.g. "error|exception|fault"). Up to 10 alternatives.'
         )
     }),
     execute: async ({ pattern }) => ({
