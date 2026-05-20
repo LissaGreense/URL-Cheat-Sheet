@@ -97,15 +97,18 @@
   }
 
   /**
-   * Extract the query string from a grep_doc `input` payload. The
-   * input shape is `{ query: string }`; fall back to empty string if
-   * the model hasn't streamed the query yet.
+   * Extract the pattern string from a grep_doc `input` payload. The
+   * input shape is `{ pattern: string }` (renamed from `query` in
+   * ucs-8nl / PR #120 to advertise pipe-separated OR-union support);
+   * fall back to empty string if the model hasn't streamed the pattern
+   * yet. The prop on `GrepDocScan` is still named `query` because that
+   * matches the sys-voice label (`q: "..."`) in the scan card.
    */
   function queryFor(input: unknown): string {
     if (!input || typeof input !== 'object') return '';
     const i = input as Record<string, unknown>;
-    const q = i['query'];
-    return typeof q === 'string' ? q : '';
+    const p = i['pattern'];
+    return typeof p === 'string' ? p : '';
   }
 
   /**
