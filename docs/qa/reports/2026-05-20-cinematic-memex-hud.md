@@ -224,3 +224,171 @@ guidance gate, not a blocker.
   `MessageStream.test.ts` that walks a real SSE-shape part through
   `queryFor` and `hitsFor` — that's the test that would have caught
   this drift.
+
+---
+
+## Re-run — 2026-05-20 (post-fix `3e165a5`)
+
+**Scope:** Re-verify Case 3, Case 4b, Case 7 after impl agent landed
+`3e165a5 fix(web): wire all 4 tool scans + correct grep_doc schema
+drift`, plus spot-check the two new scan-card interiors (OutlineScan,
+ReadLinesScan).
+
+**Run env:** Same local `bun --filter @url-cheat-sheet/web dev` against
+`http://localhost:5173/`. Worktree synced to `origin/main` (latest
+includes ADR 0006 + Vercel deploy skills). Tab is `visible` this time
+(`document.visibilityState === 'visible'`), so RAF throttling is not in
+play for the re-run.
+
+**Doc under test:** Same as before — `https://www.rfc-editor.org/rfc/rfc2324`
+(HTCPCP RFC 2324). Key entered via settings drawer.
+
+**Question:** *"What HTTP status codes does this document define?"* — same
+shape as the previous Case 3 prompt, chosen because the model reliably
+calls all four tool types (outline → grep_doc × 2 → read_lines →
+finalize) to answer it against this document.
+
+### Case 3 — Differentiated scans for grep_doc + finalize (PARTIAL PASS — original defects fixed, new defect filed as `ucs-eem`)
+
+**Fixed:**
+
+- GrepDocScan's `q:` field now renders the actual `input.pattern` value
+  (ucs-aoo regression closed). Both grep cards display the real query:
+  card #1 → `q: "HTTP status | status code | 4xx | 5xx | 2xx | 200 |
+  404 | 500"` (8-term OR-union joined with ` | ` per the array-form
+  contract);
+  card #2 → `q: "status | HTTP | response code | error code"`.
+- FinalizeScan continues to work — the assistant's final answer
+  (~6 paragraphs, citations footer `[ CITATIONS: L202-L204, L206,
+  L211-L215, L228, L230-L232 ]`) renders inside the panel with the
+  bracket chrome intact.
+- The `output.matches` shape is now read correctly by `hitsFor` — the
+  data is in the DOM (verified by introspecting the inner `<div
+  class="outline">[data-state]` and `<div class="read-lines">[data-state]`
+  attrs both at `output-available`).
+
+**New defect blocking full pass:** `ucs-eem` — status pill text frozen on
+its initial mount value across all tool types. Even though every scan's
+underlying state correctly transitions to `output-available` (data-state
+attrs confirm this) and the body renders the terminal-state content
+(`no sections` text, snippet pre-block, citations footer), the
+`StatusPill` inner `<span>` never updates. After full stream completion
+all five pills read:
+
+- OUTLINE → `[ SCANNING ]` (should be `[ NO_SECTIONS ]` — body says
+  "no sections", state is `output-available`)
+- GREP_DOC × 2 → `[ SCANNING ]` (should be `[ N HITS ]`; sweep
+  `data-state=done` so the scan completed)
+- READ_LINES → `[ READING ]` (should be `[ L<start>–L<end> ]`; pre-block
+  with real text content is rendered)
+- FINALIZE → `[ COMPILING ]` (should be `[ COMPLETE ]` or `[ COMPILED ]`;
+  full answer + citations are rendered)
+
+A MutationObserver attached to the first pill `<span>` over 30+ seconds
+of streaming captured **zero** text/childList mutations — Svelte simply
+does not write to the live text node.
+
+Likely root cause (per ucs-eem): `scrambleIn` action calls
+`gsap.to(node, { scrambleText: { text: finalText } })` which, when the
+ScrambleTextPlugin IS registered (production / dev), mutates `node`'s
+text content and detaches Svelte's tracked text node. The unit tests
+(15/15 pass in `MessageStream.test.ts`) miss this because vitest's
+JSDOM env has the plugin **un**registered — every test emits stderr
+`Invalid property scrambleText set to ... Missing plugin?
+gsap.registerPlugin()`, so scrambleIn is a no-op in test and Svelte
+text reactivity works.
+
+### Case 4b — Stream-abort cancellation (HARNESS-BLOCKED, not a defect)
+
+Confirmed unchanged from prior report. There is no STOP / cancel /
+abort affordance in the chat UI — verified by enumerating all
+buttons during streaming:
+
+```
+[ "⚙|Settings|false", "> CHANGE||false", "> SEND||true" ]
+```
+
+(`> SEND` is disabled while streaming, no other affordance is added).
+`apps/web/src/routes/+page.svelte` has a `reset()` function commented as
+"future surfaces — e.g. an abort gesture — might invoke this", and the
+only `abort` reference in the chat surface is that comment. So Case 4b
+remains untestable from the rendered surface alone, regardless of
+harness. Recommend manual smoke on Vercel preview with browser DevTools
+to cancel the SSE fetch directly — and/or treating the missing
+abort affordance as a separate UX-debt issue distinct from ucs-s9c
+acceptance.
+
+### Case 7 — No console errors / warnings (PASS — ucs-8n1 regression closed)
+
+Across a full multi-turn session (URL ingest → ready → grep_doc-heavy
+chat turn → reset), the Chrome MCP `read_console_messages` returned
+only two `[CLEAR]` markers from explicit `console.clear()` calls and
+zero warnings or errors. Specifically:
+
+- Zero `[MessageStream] unknown tool type "tool-outline"` warnings.
+- Zero `[MessageStream] unknown tool type "tool-read_lines"` warnings.
+- The new `MessageStream.test.ts` regression test (`does not log a
+  console warning for known tool types (regression: ucs-8n1)`) passes
+  and ratchets this — the silent fall-through branch in
+  `MessageStream.svelte` is wired with an explicit "render nothing AND
+  don't warn" comment for future-tool drift.
+
+### Spot-check — OutlineScan interior (PASS on chrome, FAIL on pill text per ucs-eem)
+
+- Header renders `// OUTLINE` in the sys-voice register (SysLabel).
+- Body for the empty-headings case renders the literal `no sections` in
+  the `.outline__empty` class block — verified visually + via DOM dump.
+- The card uses the same `.scan-card` chrome as the existing
+  GrepDocScan / FinalizeScan cards: corner brackets, header row,
+  bottom-right `+++` tick cluster. Layout is consistent — no
+  white-text-on-white, no overflow, no broken styling.
+- Pill text rendering bug applies (see ucs-eem).
+
+### Spot-check — ReadLinesScan interior (PASS on chrome, FAIL on pill text per ucs-eem)
+
+- Header renders `// READ_LINES` in the sys-voice register.
+- Body renders a `<pre class="read-lines__text">` block with the
+  monospace `Lxxx | <line text>` format — text from the tool's
+  `output.text` field passes through untransformed. Verified the actual
+  snippet renders correctly (L202–L240 range showing HTCPCP section
+  2.3.1 / 2.3.2 / 3. headers and prose).
+- `+++` tick cluster present (active scan / output-available branch).
+- Pill text rendering bug applies (see ucs-eem).
+
+### Multi-turn stability note (non-blocking, not filed)
+
+The first chat turn succeeded fully (200 status, complete answer +
+finalize card). Two subsequent turns (turns 2 + 3 in the same session)
+returned `The chat request failed. Try again, or check your key in
+settings.` with the dev-server log showing
+`{ kind: 'streamText.error', name: 'AI_MissingToolResultsError' }`. This
+is an AI SDK error — the model called tools on the next turn but tool
+results never made it back into the request payload. Could be a
+multi-turn state bug, could be transient. Not within the ucs-s9c re-run
+scope — flagging for the orchestrator's awareness only.
+
+## Re-run verdict
+
+`ucs-s9c` is **NOT clean for `in_review`**. The three originally-filed
+defects (ucs-aoo / ucs-ozi / ucs-8n1) are fully fixed and verified, but
+a new blocking defect (ucs-eem) surfaces once the underlying state
+mapping is correct — the visible pill text is stuck at the
+intermediate-mount value across all four tool types. Per spec §5.1 /
+§5.2 / §5.5 the pill MUST reflect the terminal tool state ("[ N HITS ]",
+"[ N SECTIONS ]", "[ L<start>–L<end> ]", "[ COMPLETE ]"); without that,
+every chat turn ends visually as if it's still streaming.
+
+Recommend:
+
+1. Impl team takes ucs-eem and patches scrambleIn (the action that
+   captures and overwrites `node.textContent`) so it doesn't detach
+   Svelte's tracked text node. Approaches listed in the ucs-eem
+   description.
+2. Add a vitest setup hook that registers `gsap.ScrambleTextPlugin` so
+   the existing 15 MessageStream tests fail under the same condition
+   the browser exhibits — that's the test that would have caught this
+   on the first impl pass. (Alternatively: an integration-style test
+   driven by `playwright` against the real dev surface.)
+3. Re-run the three cases above once ucs-eem closes. Case 4b's harness
+   limitation remains the same — recommend manual smoke on Vercel
+   preview rather than another QA-team pass.
