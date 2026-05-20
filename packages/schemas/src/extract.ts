@@ -18,10 +18,24 @@ export const scanResultSchema = z.strictObject({
   threats: z.array(threatSchema).readonly()
 });
 
+export const headingSchema = z.strictObject({
+  text: z.string().min(1),
+  level: z.union([
+    z.literal(1),
+    z.literal(2),
+    z.literal(3),
+    z.literal(4),
+    z.literal(5),
+    z.literal(6)
+  ]),
+  line: z.number().int().positive()
+});
+
 export const documentSchema = z.strictObject({
   text: z.string(),
   title: z.string(),
-  sourceUrl: z.string().url()
+  sourceUrl: z.string().url(),
+  headings: z.array(headingSchema)
 });
 
 export const extractRequestSchema = z.strictObject({
@@ -51,6 +65,7 @@ export const extractErrorSchema = z.strictObject({
 
 export type Threat = z.infer<typeof threatSchema>;
 export type ScanResult = z.infer<typeof scanResultSchema>;
+export type Heading = z.infer<typeof headingSchema>;
 export type Document = z.infer<typeof documentSchema>;
 export type ExtractRequest = z.infer<typeof extractRequestSchema>;
 export type ExtractResponse = z.infer<typeof extractResponseSchema>;
