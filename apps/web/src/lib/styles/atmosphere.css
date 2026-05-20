@@ -1,17 +1,22 @@
 /**
- * atmosphere.css — Phase 1 static atmosphere stack.
+ * atmosphere.css — atmosphere stack + ambient-motion vocabulary.
  *
  * Defines the five-layer ambient backdrop from spec §2.3 as utility
- * classes consumed by `AtmosphereShell.svelte`. Phase 1 ships these as
- * static layers; Phase 2 layers motion (turbulence drift, glow-pad
- * drift, spec-dot float, cursor-halo follow) on top WITHOUT changing
- * these selectors.
+ * classes consumed by `AtmosphereShell.svelte`. Layer selectors stay
+ * stable across phases — Svelte actions layer motion on top by adding
+ * classes that key into the `@keyframes` rules at the bottom of this
+ * file (idle-breath, plus future glow-pad drift / spec-dot float).
  *
- * Hard rule: no `@keyframes` in this file during Phase 1. Spec §2.3
- * calls out the ambient motion as a Phase 2 deliverable.
+ * Phase 2 (Task 10) added:
+ *   - `.atmosphere__cursor-halo` radial gradient driven by `--cx`/`--cy`
+ *     custom properties (written by the `cursorHalo` action).
+ *   - `@keyframes idle-breath` + `.idle-breath` class (consumed by the
+ *     `idleBreath` action). Per spec §3.3, this is the ambient
+ *     vocabulary's home — `phosphorFlash` lives in `tokens.css` because
+ *     it's a global motion primitive, not atmosphere-scoped.
  *
  * Depends on `tokens.css` for `--ink-*`, `--green-acid`, `--teal-glacial`,
- * and `--hair`.
+ * `--hair`, and `--ease-linear`.
  */
 
 /* The root container: a fixed full-viewport stack origin. Sits behind
@@ -112,13 +117,58 @@
   );
 }
 
-/* Layer 5b — cursor halo placeholder. Phase 1 ships this as an
-   invisible-but-present div so Phase 2 can wire `pointermove` against
-   the same selector without touching shell markup. */
+/* Layer 5b — cursor halo. A fixed full-viewport radial gradient
+   centered on `--cx`/`--cy` custom properties written by the
+   `cursorHalo` Svelte action (Phase 2 / Task 10). Defaults to a
+   centered, invisible state so the layer is harmless before motion
+   wires in (reduced-motion + pointer-coarse users see nothing).
+
+   Opacity is intentionally low — this is ambient garnish, not a
+   pointer pet. The gradient size and color tune the spec'd
+   "rest of the page is calm" feel. */
 .atmosphere__cursor-halo {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0;
+  background: radial-gradient(
+    circle 240px at var(--cx, 50%) var(--cy, 50%),
+    rgba(190, 226, 110, 0.06) 0%,
+    rgba(91, 219, 198, 0.03) 40%,
+    transparent 70%
+  );
+  /* If the action never runs (reduced motion / coarse pointer), the
+     defaults above place an invisible-by-opacity gradient at center. */
+  opacity: var(--cursor-halo-opacity, 1);
+}
+
+/*
+  `@keyframes idle-breath` — slow yoyo-scale ambient loop, spec §3.3.
+  Consumed by the `idleBreath` Svelte action. The action writes the
+  per-element `--idle-breath-duration` and `--idle-breath-scale-to`
+  custom properties so this one rule serves every caller.
+
+  `alternate` direction makes the keyframe shorthand for a yoyo without
+  needing a dedicated 0→peak→0 keyframe; `--ease-linear` keeps the
+  breath even (ease curves on a 1.04 scale read as "stuttering" rather
+  than "breathing").
+*/
+@keyframes idle-breath {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(var(--idle-breath-scale-to, 1.04));
+  }
+}
+
+.idle-breath {
+  animation: idle-breath var(--idle-breath-duration, 8000ms) var(--ease-linear) infinite alternate;
+  /* Origin matters: scaling without a fixed origin would drift fixed-
+     position elements (e.g. the corner stamp) away from their anchor.
+     Centering keeps the breath in place. */
+  transform-origin: center center;
+  /* Hint to the compositor that this element transforms — avoids
+     repaint thrash on glow pads that already cost a blur filter. */
+  will-change: transform;
 }

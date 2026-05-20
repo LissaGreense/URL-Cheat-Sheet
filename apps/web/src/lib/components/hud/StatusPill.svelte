@@ -22,6 +22,7 @@
    *   - `dim`    → `--bone-dim` (secondary, e.g. idle `[ STANDBY ]`)
    */
   import { scrambleIn } from '../../motion/scrambleIn';
+  import { phosphorFlash } from '../../motion/phosphorFlash';
 
   type Props = {
     state: string;
@@ -29,14 +30,27 @@
   };
 
   let { state, tone = 'normal' }: Props = $props();
+
+  // The phosphor flash colorizes per tone — alarm states pulse amber
+  // (matches the `// INGEST_FAILED` choreography from spec §4.3),
+  // everything else gets the default green-acid pulse.
+  const flashColor = $derived(tone === 'alarm' ? 'var(--amber-alarm)' : 'var(--green-acid)');
 </script>
 
+<!--
+  Two actions co-exist on the inner <span>:
+    - `scrambleIn` reveals the state text on mount (Task 9).
+    - `phosphorFlash` pulses on every `state` change (Task 10) —
+      `trigger: state` re-fires the keyframe each transition like
+      `[ STANDBY ]` → `[ READY ]`.
+  Svelte allows stacking multiple `use:` directives on one element.
+-->
 <span
   class="status-pill"
   class:status-pill--alarm={tone === 'alarm'}
   class:status-pill--dim={tone === 'dim'}
 >
-  [ <span use:scrambleIn>{state}</span> ]
+  [ <span use:scrambleIn use:phosphorFlash={{ trigger: state, color: flashColor }}>{state}</span> ]
 </span>
 
 <style>

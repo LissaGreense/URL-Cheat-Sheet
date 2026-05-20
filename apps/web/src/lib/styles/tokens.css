@@ -57,3 +57,34 @@
   --dur-cinema: 1600ms;
   --dur-ambient: 8000ms;
 }
+
+/* ── §3.3 Motion vocabulary ─────────────────────────────────────────── */
+
+/*
+  `@keyframes phosphor-flash` — single-frame box-shadow + filter pulse,
+  spec §3.3. Consumed by the `phosphorFlash` Svelte action; the action
+  adds the `.phosphor-flash` class for ~280ms then removes it so the
+  next state change re-fires the keyframe.
+
+  The pulse color reads from `--phosphor-flash-color` (defaults to
+  `--green-acid`; the action writes the value, so callers can pass
+  amber for error pulses without needing a second keyframe).
+*/
+@keyframes phosphor-flash {
+  0% {
+    box-shadow: 0 0 0 0 transparent;
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  35% {
+    box-shadow: 0 0 12px 2px var(--phosphor-flash-color, var(--green-acid));
+    filter: drop-shadow(0 0 6px var(--phosphor-flash-color, var(--green-acid)));
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    filter: drop-shadow(0 0 0 transparent);
+  }
+}
+
+.phosphor-flash {
+  animation: phosphor-flash 280ms ease-out;
+}

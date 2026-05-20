@@ -13,6 +13,8 @@
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { idleBreath } from '../../motion/idleBreath';
+  import { cursorHalo } from '../../motion/cursorHalo';
 
   /**
    * Props for AtmosphereShell.
@@ -39,8 +41,11 @@
     Layer 3: glow pad. Phase 1 ships ONE static centered pad; Phase 2
     duplicates this element with drift offsets. Same class — no shell
     change needed.
+
+    `use:idleBreath` adds a slow 8s yoyo-scale so the glow gently
+    pulses (spec §3.4 ambient discipline). Pure CSS — no listeners.
   -->
-  <div class="atmosphere__glow-pad" aria-hidden="true"></div>
+  <div class="atmosphere__glow-pad" aria-hidden="true" use:idleBreath></div>
 
   <!--
     Layer 4: spec dots. Phase 1 ships 4 static dots in fixed positions;
@@ -56,8 +61,13 @@
   <!-- Layer 5a: scanline texture -->
   <div class="atmosphere__scanline" aria-hidden="true"></div>
 
-  <!-- Layer 5b: cursor halo (invisible placeholder in Phase 1) -->
-  <div class="atmosphere__cursor-halo" aria-hidden="true"></div>
+  <!--
+    Layer 5b: cursor halo. The action lerps `--cx`/`--cy` toward the
+    pointer each RAF tick; the radial gradient on `.atmosphere__cursor-halo`
+    (atmosphere.css) reads those custom properties. No-op on touch
+    devices and under reduced motion.
+  -->
+  <div class="atmosphere__cursor-halo" aria-hidden="true" use:cursorHalo></div>
 
   <!-- Content slot — renders above all atmosphere layers -->
   <div class="atmosphere__content">
