@@ -22,6 +22,7 @@
   import StatusPill from '../hud/StatusPill.svelte';
   import SysLabel from '../hud/SysLabel.svelte';
   import CornerStamp from '../hud/CornerStamp.svelte';
+  import { splitLineReveal } from '../../motion/splitLineReveal';
 
   /**
    * Props for IdleState.
@@ -52,7 +53,7 @@
 <div class="idle-state">
   <h1 class="wordmark">URL_CHEAT_SHEET</h1>
 
-  <p class="directive">LOAD URL TO YOUR MEMORY</p>
+  <p class="directive" use:splitLineReveal>LOAD URL TO YOUR MEMORY</p>
 
   <form class="idle-form" onsubmit={onSubmit}>
     <HudPanel>
