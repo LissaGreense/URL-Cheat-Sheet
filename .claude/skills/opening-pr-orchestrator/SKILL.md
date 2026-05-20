@@ -39,6 +39,14 @@ REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
 # worktrees with 0755; bd expects 0700. Idempotent.
 [ -d .beads ] && chmod 700 .beads
 
+# Materialize workspace node_modules. `git worktree add` creates an independent
+# working tree that does NOT share node_modules with the main repo, so the
+# first `bun run`/`bunx vitest`/`bun packages/evals/...` invocation would
+# otherwise fail with "Cannot find module". One-time per worktree, ~2s when
+# the global Bun cache is warm. See ucs-mlf for the multi-task footprint
+# that drove codifying this.
+bun install
+
 # Seed an empty commit so GH accepts the PR (it refuses no-diff PRs).
 git commit --allow-empty -m "chore($ID): open draft PR for orchestrator tracking"
 

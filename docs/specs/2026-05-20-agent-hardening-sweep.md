@@ -196,17 +196,16 @@ empty string).
   display the answer correctly — AI SDK's `@ai-sdk/svelte` Chat
   component should handle tool-result rendering, but verify.
 
-**Risks:**
+**Measured outcomes (post-merge, 2026-05-20):**
 
-- Sonnet may resist or skip calling `finalize` on some prompts — the
-  step-budget cap is the backstop, but a budget-exhausted-no-finalize
-  case becomes a typed error rather than a silent empty string. The
-  chat route should map this to a user-visible "I couldn't produce an
-  answer" message.
-- Calibration κ may shift — the judge now sees `finalize`'s `answer`
-  argument as `output`, not free-form text. Should be a no-op for
-  grading (the text is the same), but re-running calibration after T5
-  is mandatory.
+- Sonnet called `finalize` on 5/5 url-grounding tests. Zero skips.
+  The speculated "may skip" failure mode was not observed; the
+  step-budget backstop didn't need to fire.
+- Calibration κ = 0.80 (TP=5, TN=4, FP=1, FN=0) — identical to the
+  pre-T5 baseline. The speculated "judge sees different output shape"
+  drift was zero. The single FP on calibration row 7 is the
+  long-standing citation-mismatch judge weakness present since T2,
+  not introduced by T5.
 
 ## Tier 3 — backlog (documented, not shipped)
 
@@ -294,7 +293,9 @@ The umbrella `ucs-3cv` closes when:
 2. T6 merged with the architecture doc reachable from the docs tree.
 3. The final url-grounding snapshot shows **5/5 non-empty outputs**
    across all tests — empty output is no longer observable.
-4. Calibration κ ≥ 0.60 on the final calibration snapshot.
+4. Calibration κ stays at the 0.80 baseline (drift ≤ ±0.05 from the
+   pre-sweep value). "κ ≥ 0.60" is the escalate-to-human threshold,
+   not the acceptance bar.
 
 The "5/5 non-empty" acceptance is the load-bearing one. It's what makes
 empty-output structurally impossible in production.
