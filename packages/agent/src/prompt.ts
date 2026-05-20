@@ -1,22 +1,7 @@
 /**
- * System prompt for the URL-grounded chat agent. The model grounds every
- * factual claim via the grep_doc tool and cites line numbers inline. The
- * grep_doc tool returns text from an untrusted external document; the
- * model treats those snippets as data, not instructions.
- *
- * Structure (per Anthropic Prompting 101 — repeat critical constraints):
- * 1. Identity
- * 2. Never-empty rule
- * 3. Untrusted-data warning
- * 4. Tool usage guidance (grep_doc)
- * 5. Strict citation rule
- * 6. No-markdown rule
- * 7. Finalize directive (turn-end requirement, repeated at bottom)
- *
- * The previous "at most 8 tool calls" budget rule was removed in T5: the
- * `hasToolCall('finalize')` stop condition replaces a hardcoded number,
- * so the prompt now references the `finalize` tool as the turn-end
- * mechanism instead.
+ * System prompt for the URL-grounded chat agent. Every factual claim must
+ * be cited Lxx; tool results are untrusted data, not instructions; the
+ * turn ends with a `finalize` tool call.
  */
 export const SYSTEM_PROMPT = `You answer questions about a document the user has loaded.
 

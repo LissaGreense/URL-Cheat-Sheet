@@ -2,23 +2,12 @@ import { tool } from 'ai';
 import { z } from 'zod';
 
 /**
- * `finalize` — sentinel tool that closes the agent's turn.
- *
- * The `execute` is a trivial echo: it returns the input `{ answer, citations }`
- * as the tool result. This is required for multi-turn validity. Without it,
- * the assistant message in the conversation history contains a
- * `tool-finalize` call with no matching tool result; `convertToModelMessages`
- * walks the history on the *next* turn, sees the unresolved tool call, and
- * throws `AI_MissingToolResultsError` mid-stream (ucs-hoh).
- *
- * The agent's `stopWhen: hasToolCall('finalize')` still halts the loop the
- * moment the model calls finalize — execute runs once with the model's
- * input, the stream emits the tool result, and the loop stops. Single-turn
- * behaviour is unchanged; multi-turn no longer throws.
- *
- * Empty assistant output remains impossible by design: the model can only
- * end its turn by calling `finalize` with a non-empty `answer`, enforced by
- * the Zod `.min(1)` constraint.
+ * Sentinel tool that closes the agent's turn. `stopWhen: hasToolCall(
+ * 'finalize')` halts the loop the moment the model calls this. The
+ * `execute` is a trivial echo and MUST stay: without a tool result in
+ * the assistant message, `convertToModelMessages` throws
+ * `AI_MissingToolResultsError` on the next turn against the unresolved
+ * call.
  */
 export const finalize = tool({
   description:
