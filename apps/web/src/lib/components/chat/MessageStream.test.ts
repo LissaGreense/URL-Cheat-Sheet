@@ -102,7 +102,7 @@ describe('MessageStream', () => {
                 type: 'tool-grep_doc',
                 toolCallId: 'c1',
                 state: 'input-streaming',
-                input: { query: 'tea' }
+                input: { pattern: 'tea' }
               }
             ])
           ]
@@ -113,6 +113,83 @@ describe('MessageStream', () => {
     // GrepDocScan renders the GREP_DOC header inside a status pill block.
     expect(container.textContent).toContain('GREP_DOC');
     expect(container.querySelector('.status-pill')).not.toBeNull();
+  });
+
+  it('renders the grep_doc query verbatim from input.pattern (string form)', () => {
+    // Regression: ucs-aoo — an earlier mapper read `input.query` and
+    // silently rendered `q: ""`. The tool schema is `pattern: string |
+    // string[]`, so the mapper must read `pattern`.
+    const { container } = render(MessageStreamHost, {
+      props: {
+        chat: {
+          messages: [
+            msg('m1', 'assistant', [
+              {
+                type: 'tool-grep_doc',
+                toolCallId: 'c1',
+                state: 'input-available',
+                input: { pattern: 'status code' }
+              }
+            ])
+          ]
+        },
+        awaitingAssistant: false
+      }
+    });
+    expect(container.textContent).toContain('"status code"');
+  });
+
+  it('renders the grep_doc query as a `|`-joined string for the array (OR-union) form', () => {
+    // Tool schema accepts `pattern: string[]` for synonym exploration
+    // (ucs-0f3). The OR semantics are visualized as ` | `-joined.
+    const { container } = render(MessageStreamHost, {
+      props: {
+        chat: {
+          messages: [
+            msg('m1', 'assistant', [
+              {
+                type: 'tool-grep_doc',
+                toolCallId: 'c1',
+                state: 'input-available',
+                input: { pattern: ['error', 'exception', 'fault'] }
+              }
+            ])
+          ]
+        },
+        awaitingAssistant: false
+      }
+    });
+    expect(container.textContent).toContain('"error | exception | fault"');
+  });
+
+  it('renders the grep_doc hit count from output.matches.length on completion', () => {
+    // Regression: ucs-ozi — an earlier mapper read `output.hits` and
+    // silently rendered `0 HITS` for every completed scan. Tool returns
+    // `{ matches: GrepMatch[] }` (packages/agent/src/tools/grep-doc.ts).
+    const { container } = render(MessageStreamHost, {
+      props: {
+        chat: {
+          messages: [
+            msg('m1', 'assistant', [
+              {
+                type: 'tool-grep_doc',
+                toolCallId: 'c1',
+                state: 'output-available',
+                input: { pattern: 'tea' },
+                output: {
+                  matches: [
+                    { line: 1, text: 'a', before: [], after: [] },
+                    { line: 5, text: 'b', before: [], after: [] }
+                  ]
+                }
+              }
+            ])
+          ]
+        },
+        awaitingAssistant: false
+      }
+    });
+    expect(container.querySelector('.status-pill')!.textContent?.trim()).toBe('[ 2 HITS ]');
   });
 
   it('routes tool-finalize parts to FinalizeScan', () => {
@@ -189,8 +266,8 @@ describe('MessageStream', () => {
                 type: 'tool-grep_doc',
                 toolCallId: 'c1',
                 state: 'output-available',
-                input: { query: 'tea' },
-                output: { hits: 2 }
+                input: { pattern: 'tea' },
+                output: { matches: [{ line: 1, text: 'tea', before: [], after: [] }] }
               },
               { type: 'text', text: 'tea is hot.' }
             ])
@@ -201,5 +278,120 @@ describe('MessageStream', () => {
     });
     const text = container.textContent ?? '';
     expect(text.indexOf('GREP_DOC')).toBeLessThan(text.indexOf('tea is hot.'));
+  });
+
+  it('routes tool-outline parts to OutlineScan', () => {
+    // ucs-8n1 close-out: outline is one of two new tool routes added
+    // alongside grep_doc + finalize. The header label and the rendered
+    // headings list are the load-bearing evidence the route fired.
+    const { container } = render(MessageStreamHost, {
+      props: {
+        chat: {
+          messages: [
+            msg('m1', 'assistant', [
+              {
+                type: 'tool-outline',
+                toolCallId: 'c1',
+                state: 'output-available',
+                input: {},
+                output: {
+                  headings: [
+                    { text: 'Intro', level: 1, line: 1 },
+                    { text: 'Body', level: 2, line: 10 }
+                  ]
+                }
+              }
+            ])
+          ]
+        },
+        awaitingAssistant: false
+      }
+    });
+    expect(container.textContent).toContain('OUTLINE');
+    expect(container.querySelector('.outline__list')).not.toBeNull();
+    expect(container.querySelector('.status-pill')!.textContent?.trim()).toBe('[ 2 SECTIONS ]');
+  });
+
+  it('routes tool-read_lines parts to ReadLinesScan', () => {
+    // ucs-8n1 close-out: read_lines is the second new route. The <pre>
+    // block with the verbatim `Lxx | ` prefix is the load-bearing
+    // evidence the snippet text reached the DOM.
+    const { container } = render(MessageStreamHost, {
+      props: {
+        chat: {
+          messages: [
+            msg('m1', 'assistant', [
+              {
+                type: 'tool-read_lines',
+                toolCallId: 'c1',
+                state: 'output-available',
+                input: { start: 10, end: 11 },
+                output: { text: 'L10 | a\nL11 | b', truncated: false }
+              }
+            ])
+          ]
+        },
+        awaitingAssistant: false
+      }
+    });
+    expect(container.textContent).toContain('READ_LINES');
+    const pre = container.querySelector('pre.read-lines__text');
+    expect(pre).not.toBeNull();
+    expect(pre!.textContent).toContain('L10 | a');
+    expect(container.querySelector('.status-pill')!.textContent?.trim()).toBe('[ L10–L11 ]');
+  });
+
+  it('does not log a console warning for known tool types (regression: ucs-8n1)', async () => {
+    // Pre-fix, MessageStream warned per unknown-tool part and produced
+    // 210+ warnings per chat turn because outline + read_lines were
+    // routed to the unknown branch. After ucs-8n1 the four shipped tools
+    // each have a route and the unknown branch is silent — both
+    // expectations matter, so we assert console.warn is never called
+    // for a turn that contains all four routes.
+    const { vi } = await import('vitest');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(MessageStreamHost, {
+        props: {
+          chat: {
+            messages: [
+              msg('m1', 'assistant', [
+                {
+                  type: 'tool-grep_doc',
+                  toolCallId: 'c1',
+                  state: 'output-available',
+                  input: { pattern: 'tea' },
+                  output: { matches: [] }
+                },
+                {
+                  type: 'tool-outline',
+                  toolCallId: 'c2',
+                  state: 'output-available',
+                  input: {},
+                  output: { headings: [] }
+                },
+                {
+                  type: 'tool-read_lines',
+                  toolCallId: 'c3',
+                  state: 'output-available',
+                  input: { start: 1, end: 2 },
+                  output: { text: '', truncated: false }
+                },
+                {
+                  type: 'tool-finalize',
+                  toolCallId: 'c4',
+                  state: 'input-available',
+                  input: { answer: 'done', citations: [] }
+                }
+              ])
+            ]
+          },
+          awaitingAssistant: false
+        }
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
