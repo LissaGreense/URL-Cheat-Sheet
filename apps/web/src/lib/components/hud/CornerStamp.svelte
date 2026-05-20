@@ -19,6 +19,8 @@
    * @property {'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'} position
    *   Which viewport corner to anchor to.
    */
+  import { idleBreath } from '../../motion/idleBreath';
+
   type Props = {
     text: string;
     position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
@@ -50,7 +52,12 @@
   });
 </script>
 
-<span class="corner-stamp" style={anchor}>{text}</span>
+<!--
+  `use:idleBreath` keeps the stamp gently scaling (1.0 → 1.04, 8s) so
+  the persistent corner anchor reads as "alive" per spec §3.4. Pure
+  CSS — no listeners. ADR 0009: reduced-motion users see a static stamp.
+-->
+<span class="corner-stamp" style={anchor} use:idleBreath>{text}</span>
 
 <style>
   /*

@@ -150,6 +150,71 @@ describe('ReadyState', () => {
     expect(input.value).toBe('pre-filled');
   });
 
+  it('disables the composer and swaps placeholder when keySet is false (ucs-88j)', () => {
+    const { container } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: { messages: [] },
+        chatInput: '',
+        keySet: false,
+        onSendChat: () => {},
+        onReset: () => {}
+      }
+    });
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+    expect(input.placeholder).toBe('Add your Anthropic API key in settings to start chatting');
+  });
+
+  it('leaves the composer in the default state when keySet is true (ucs-88j)', () => {
+    const { container } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: { messages: [], status: 'ready' as const },
+        chatInput: '',
+        keySet: true,
+        onSendChat: () => {},
+        onReset: () => {}
+      }
+    });
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input.disabled).toBe(false);
+    expect(input.placeholder).toBe('Ask about this page...');
+  });
+
+  it('renders the inline error surface above the composer when inlineError is set (ucs-88j)', () => {
+    const { container, getByTestId } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: { messages: [] },
+        chatInput: '',
+        inlineError: 'Provider rate limit or quota exceeded — check your Anthropic spend limits.',
+        onSendChat: () => {},
+        onReset: () => {}
+      }
+    });
+    const error = getByTestId('ready-inline-error');
+    expect(error).not.toBeNull();
+    expect(error.textContent).toContain('rate limit');
+    // The error sits inside the composer wrapper but before the form.
+    const composerForm = container.querySelector('form.composer');
+    expect(composerForm).not.toBeNull();
+  });
+
+  it('omits the inline error surface when inlineError is null (ucs-88j)', () => {
+    const { container } = render(ReadyStateHost, {
+      props: {
+        document: SAMPLE_DOC,
+        chat: { messages: [] },
+        chatInput: '',
+        inlineError: null,
+        onSendChat: () => {},
+        onReset: () => {}
+      }
+    });
+    expect(container.querySelector('[data-testid="ready-inline-error"]')).toBeNull();
+  });
+
   it('renders MessageStream with the chat messages', () => {
     const { container } = render(ReadyStateHost, {
       props: {

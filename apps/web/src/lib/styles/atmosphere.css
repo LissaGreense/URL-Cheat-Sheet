@@ -1,17 +1,37 @@
 /**
- * atmosphere.css — Phase 1 static atmosphere stack.
+ * atmosphere.css — atmosphere stack + ambient-motion vocabulary.
  *
  * Defines the five-layer ambient backdrop from spec §2.3 as utility
- * classes consumed by `AtmosphereShell.svelte`. Phase 1 ships these as
- * static layers; Phase 2 layers motion (turbulence drift, glow-pad
- * drift, spec-dot float, cursor-halo follow) on top WITHOUT changing
- * these selectors.
+ * classes consumed by `AtmosphereShell.svelte`. Layer selectors stay
+ * stable across phases — Svelte actions layer motion on top by adding
+ * classes that key into the `@keyframes` rules at the bottom of this
+ * file (idle-breath, plus future glow-pad drift / spec-dot float).
  *
- * Hard rule: no `@keyframes` in this file during Phase 1. Spec §2.3
- * calls out the ambient motion as a Phase 2 deliverable.
+ * Phase 2 (Task 10) added:
+ *   - `.atmosphere__cursor-halo` radial gradient driven by `--cx`/`--cy`
+ *     custom properties (written by the `cursorHalo` action).
+ *   - `@keyframes idle-breath` + `.idle-breath` class (consumed by the
+ *     `idleBreath` action). Per spec §3.3, this is the ambient
+ *     vocabulary's home — `phosphorFlash` lives in `tokens.css` because
+ *     it's a global motion primitive, not atmosphere-scoped.
+ *
+ * Phase 2 (Task 12) added:
+ *   - `@keyframes atmosphere-ambient-drift` (90s) on `.atmosphere__ambient`.
+ *     The ambient layer also references an inline SVG `<filter
+ *     id="atmosphere-turbulence">` rendered by `AtmosphereShell.svelte`
+ *     for the live-noise look.
+ *   - `@keyframes atmosphere-glow-drift` (16s base) on `.atmosphere__glow-pad`
+ *     with per-element phase + position custom properties (`--phase`,
+ *     `--gx`, `--gy`) so three pads stack with independent drifts.
+ *   - `@keyframes atmosphere-spec-dot` (12s base) on `.atmosphere__spec-dot`
+ *     with per-element `--phase`, `--dx`, `--dy`, `--dop` properties.
+ *   - Mobile fallback (max-width: 768px): strips `feTurbulence`,
+ *     reduces backdrop-filter blur, hides spec dots beyond the 4th.
+ *   - `@media (prefers-reduced-motion: reduce)` strips all ambient
+ *     keyframes per ADR 0009.
  *
  * Depends on `tokens.css` for `--ink-*`, `--green-acid`, `--teal-glacial`,
- * and `--hair`.
+ * `--hair`, and `--ease-linear`.
  */
 
 /* The root container: a fixed full-viewport stack origin. Sits behind
@@ -34,43 +54,48 @@
   background: linear-gradient(123deg, var(--ink-rise), var(--ink-mid), var(--ink-base));
 }
 
-/* Layer 2 — ambient driver. Phase 1: a static low-opacity grain via a
-   layered repeating gradient. Phase 2 will swap this for a live SVG
-   `feTurbulence` filter or a pre-rendered PNG (spec §2.3 item 2). */
+/* Layer 2 — ambient driver. Phase 2 wires this layer to a live SVG
+   `<feTurbulence>` filter rendered inline by `AtmosphereShell.svelte`
+   (id `atmosphere-turbulence`). The element is given a faintly
+   off-white background so the displacement map has something to push
+   around; opacity is held low so the noise reads as texture, not
+   pattern (spec §2.3 item 2).
+
+   A 90s `atmosphere-ambient-drift` keyframe scrolls and gently scales
+   the layer so the noise field doesn't sit static (the eye picks up
+   stationary noise as a flat overlay rather than atmosphere). The
+   animation is applied only inside the `no-preference` block lower in
+   this file so reduced-motion users get a static layer (ADR 0009). */
 .atmosphere__ambient {
   position: fixed;
   inset: 0;
   z-index: -4;
   pointer-events: none;
   opacity: 0.08;
-  background-image:
-    repeating-radial-gradient(
-      circle at 20% 30%,
-      rgba(232, 232, 230, 0.04) 0,
-      rgba(232, 232, 230, 0) 2px,
-      transparent 4px
-    ),
-    repeating-radial-gradient(
-      circle at 80% 70%,
-      rgba(232, 232, 230, 0.03) 0,
-      rgba(232, 232, 230, 0) 3px,
-      transparent 6px
-    );
+  background-color: rgba(232, 232, 230, 0.5);
+  filter: url(#atmosphere-turbulence);
+  /* Hint to the compositor — the keyframe only animates transform, but
+     declaring `will-change` here also helps the filter layer stay on
+     its own GPU plane instead of triggering body repaints. */
+  will-change: transform;
+  /* Slightly oversized so the drift translate doesn't expose bare body
+     gradient at the edges. */
+  transform: translate3d(0, 0, 0) scale(1);
 }
 
-/* Layer 3 — glow pad. Phase 1 ships ONE centered radial bloom; Phase 2
-   adds 2–3 with drift loops (spec §2.3 item 3). The class is reusable —
-   multiple `.atmosphere__glow-pad` elements with different positions
-   stack additively without new selectors. */
+/* Layer 3 — glow pad. Phase 2 ships THREE pads with independent drift
+   loops (spec §2.3 item 3). Position + phase are driven by per-element
+   custom properties (`--gx`, `--gy`, `--phase`) so the markup stays
+   uniform — no per-pad selectors. */
 .atmosphere__glow-pad {
   position: fixed;
   z-index: -3;
   pointer-events: none;
-  top: 30%;
-  left: 35%;
+  top: var(--gy, 30%);
+  left: var(--gx, 35%);
   width: 40vw;
   height: 40vw;
-  opacity: 0.08;
+  opacity: var(--gop, 0.08);
   background: radial-gradient(
     circle at center,
     var(--green-acid) 0%,
@@ -78,21 +103,42 @@
     transparent 70%
   );
   filter: blur(80px);
+  /* Transform-only animation — see keyframes below. The base transform
+     here ensures jsdom + SSR see a stable resting state before motion
+     kicks in. */
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
 }
 
-/* Layer 4 — spec dot. A single small positioned circle; multiple
-   instances render side by side via repeated DOM nodes. Phase 1 ships
-   4 dots, Phase 2 expands to ~12 with motion (spec §2.3 item 4). */
+/* `.atmosphere__spec-dots` — invisible container that scopes the
+   nth-child selector used by the mobile fallback. Spec dots remain
+   `position: fixed` so the wrapper has no layout effect; `display:
+   contents` keeps it inert for the box model. */
+.atmosphere__spec-dots {
+  display: contents;
+}
+
+/* Layer 4 — spec dot. Phase 2 ships 12 dots with `translate3d` +
+   opacity yoyo float (spec §2.3 item 4). Position, size, and per-dot
+   phase live in inline custom properties (`--dx`, `--dy`, `--phase`)
+   so one class serves every instance.
+
+   Mobile (≤768px) hides dots beyond the fourth via `:nth-child(n+5)`
+   in the mobile media-query block below. */
 .atmosphere__spec-dot {
   position: fixed;
   z-index: -2;
   pointer-events: none;
-  width: 8px;
-  height: 8px;
+  top: var(--dy, 50%);
+  left: var(--dx, 50%);
+  width: var(--dsize, 8px);
+  height: var(--dsize, 8px);
   border-radius: 50%;
   background-color: var(--bone);
   mix-blend-mode: overlay;
-  opacity: 0.3;
+  opacity: var(--dop, 0.3);
+  transform: translate3d(0, 0, 0);
+  will-change: transform, opacity;
 }
 
 /* Layer 5a — scanline overlay. Static linear-gradient texture across
@@ -112,13 +158,204 @@
   );
 }
 
-/* Layer 5b — cursor halo placeholder. Phase 1 ships this as an
-   invisible-but-present div so Phase 2 can wire `pointermove` against
-   the same selector without touching shell markup. */
+/* Layer 5b — cursor halo. A fixed full-viewport radial gradient
+   centered on `--cx`/`--cy` custom properties written by the
+   `cursorHalo` Svelte action (Phase 2 / Task 10). Defaults to a
+   centered, invisible state so the layer is harmless before motion
+   wires in (reduced-motion + pointer-coarse users see nothing).
+
+   Opacity is intentionally low — this is ambient garnish, not a
+   pointer pet. The gradient size and color tune the spec'd
+   "rest of the page is calm" feel. */
 .atmosphere__cursor-halo {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0;
+  background: radial-gradient(
+    circle 240px at var(--cx, 50%) var(--cy, 50%),
+    rgba(190, 226, 110, 0.06) 0%,
+    rgba(91, 219, 198, 0.03) 40%,
+    transparent 70%
+  );
+  /* If the action never runs (reduced motion / coarse pointer), the
+     defaults above place an invisible-by-opacity gradient at center. */
+  opacity: var(--cursor-halo-opacity, 1);
+}
+
+/*
+  `@keyframes idle-breath` — slow yoyo-scale ambient loop, spec §3.3.
+  Consumed by the `idleBreath` Svelte action. The action writes the
+  per-element `--idle-breath-duration` and `--idle-breath-scale-to`
+  custom properties so this one rule serves every caller.
+
+  `alternate` direction makes the keyframe shorthand for a yoyo without
+  needing a dedicated 0→peak→0 keyframe; `--ease-linear` keeps the
+  breath even (ease curves on a 1.04 scale read as "stuttering" rather
+  than "breathing").
+*/
+@keyframes idle-breath {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(var(--idle-breath-scale-to, 1.04));
+  }
+}
+
+.idle-breath {
+  animation: idle-breath var(--idle-breath-duration, 8000ms) var(--ease-linear) infinite alternate;
+  /* Origin matters: scaling without a fixed origin would drift fixed-
+     position elements (e.g. the corner stamp) away from their anchor.
+     Centering keeps the breath in place. */
+  transform-origin: center center;
+  /* Hint to the compositor that this element transforms — avoids
+     repaint thrash on glow pads that already cost a blur filter. */
+  will-change: transform;
+}
+
+/*
+  Phase 2 / Task 12 — ambient drift keyframes.
+
+  Defined unconditionally so authoring tools see them; the
+  `animation:` property that runs them is scoped to the
+  `(prefers-reduced-motion: no-preference)` block below. This is the
+  cleanest implementation of ADR 0009 for CSS-only motion: reduced-
+  motion users get the resting visual state for free, with no
+  duplicated keyframe rules to keep in sync.
+
+  Every keyframe rule animates ONLY `transform` and `opacity` — no
+  layout properties. The whole stack composites on the GPU plane.
+*/
+
+/*
+  `atmosphere-ambient-drift` — slow 90s drift over the turbulence layer.
+  The translate range is small (1.5%) so the noise field never visibly
+  scrolls; what reads is "the texture isn't perfectly still." Scale
+  yoyos 1 → 1.05 → 1 across the loop so the texture density also
+  breathes — useful when sharing the layer with a static filter URL
+  (which would otherwise look flat).
+*/
+@keyframes atmosphere-ambient-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(1.5%, -1%, 0) scale(1.05);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+/*
+  `atmosphere-glow-drift` — 16s base loop on the glow pads. The per-pad
+  `--phase` custom property offsets `animation-delay` so three pads
+  desync without three separate keyframe rules. Range is generous
+  (~6%) because each pad sits behind an 80px blur — only large drifts
+  read through.
+*/
+@keyframes atmosphere-glow-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  25% {
+    transform: translate3d(4%, -3%, 0);
+  }
+  50% {
+    transform: translate3d(-2%, 5%, 0);
+  }
+  75% {
+    transform: translate3d(-5%, -2%, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/*
+  `atmosphere-spec-dot` — 12s base loop on the spec dots. Position
+  drifts a few viewport-pct in each direction, opacity yoyos in a
+  narrow band so dots fade in and out rather than blink. Each dot
+  picks a unique `--phase` to spread the choreography out.
+*/
+@keyframes atmosphere-spec-dot {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: var(--dop, 0.3);
+  }
+  50% {
+    transform: translate3d(2vw, -1.5vw, 0);
+    opacity: calc(var(--dop, 0.3) * 0.45);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: var(--dop, 0.3);
+  }
+}
+
+/*
+  Motion-allowed block. Reduced-motion users skip these `animation:`
+  declarations entirely (ADR 0009 strict fallback); the layers stay
+  rendered at their resting visual state.
+*/
+@media (prefers-reduced-motion: no-preference) {
+  .atmosphere__ambient {
+    animation: atmosphere-ambient-drift 90s var(--ease-linear) infinite;
+  }
+
+  .atmosphere__glow-pad {
+    animation: atmosphere-glow-drift 16s var(--ease-linear) infinite;
+    /* `--phase` is a negative seconds value written inline per pad;
+       a negative animation-delay starts the loop mid-cycle so the
+       three pads desync without waiting one full loop. */
+    animation-delay: var(--phase, 0s);
+  }
+
+  .atmosphere__spec-dot {
+    animation: atmosphere-spec-dot 12s var(--ease-linear) infinite;
+    animation-delay: var(--phase, 0s);
+  }
+}
+
+/*
+  Token default for HUD chrome blur (mobile media query below drops it
+  to 4px). Kept here rather than `tokens.css` because it's atmosphere-
+  stack-scoped; no other system reads it. Declared BEFORE the mobile
+  block so source-order resolution lets the mobile override win.
+*/
+:root {
+  --hud-blur-radius: 8px;
+}
+
+/*
+  Mobile fallback (≤768px).
+
+  Safari mobile chokes on `<feTurbulence>` regions above ~600px (it
+  rasterises the entire filter region on the CPU). The ambient layer
+  drops the filter entirely; a baked PNG of the turbulence output can
+  be slotted via `--atmosphere-ambient-mobile-bg` without a CSS
+  rewrite — currently set to a flat ink panel as graceful degradation
+  (follow-up bd issue tracks baking the PNG).
+
+  Spec dots beyond the fourth hide via `:nth-child(n+5)`. Backdrop
+  filter is halved across any HUD chrome that opts into
+  `--hud-blur-radius` (consumers default to 8px; mobile drops to 4px).
+*/
+@media (max-width: 768px) {
+  .atmosphere__ambient {
+    filter: none;
+    background-color: transparent;
+    background-image: var(--atmosphere-ambient-mobile-bg, none);
+    background-size: cover;
+    background-position: center;
+  }
+
+  .atmosphere__spec-dot:nth-child(n + 5) {
+    display: none;
+  }
+
+  :root {
+    --hud-blur-radius: 4px;
+  }
 }

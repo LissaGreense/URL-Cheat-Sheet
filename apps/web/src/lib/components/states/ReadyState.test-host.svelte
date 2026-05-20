@@ -23,11 +23,21 @@
     document: Document;
     chat: ChatMock;
     chatInput: string;
+    keySet?: boolean;
+    inlineError?: string | null;
     onSendChat: (e: SubmitEvent) => void;
     onReset: () => void;
   };
 
-  let { document, chat, chatInput = $bindable(''), onSendChat, onReset }: Props = $props();
+  let {
+    document,
+    chat,
+    chatInput = $bindable(''),
+    keySet,
+    inlineError,
+    onSendChat,
+    onReset
+  }: Props = $props();
 </script>
 
-<ReadyState {document} {chat} bind:chatInput {onSendChat} {onReset} />
+<ReadyState {document} {chat} bind:chatInput {keySet} {inlineError} {onSendChat} {onReset} />

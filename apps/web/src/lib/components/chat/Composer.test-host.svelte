@@ -9,10 +9,11 @@
   type Props = {
     value: string;
     disabled?: boolean;
+    placeholder?: string;
     onSubmit: (e: SubmitEvent) => void;
   };
 
-  let { value = $bindable(''), disabled = false, onSubmit }: Props = $props();
+  let { value = $bindable(''), disabled = false, placeholder, onSubmit }: Props = $props();
 </script>
 
-<Composer bind:value {disabled} {onSubmit} />
+<Composer bind:value {disabled} {placeholder} {onSubmit} />
