@@ -89,28 +89,20 @@ function decode(bytes: Uint8Array, charset: string): string {
 }
 
 /**
- * Fetch a URL with composed SSRF, timeout, size, content-type, and redirect
- * guards. Validates that the URL's host resolves to public unicast IPs only,
- * then calls `fetch` with the original URL. Uses `redirect: 'manual'` so each
- * hop re-runs `validateHostIsPublic` against the next target.
+ * Fetch a URL with composed SSRF, timeout, size, content-type, and
+ * redirect guards. `redirect: 'manual'` so each hop re-runs
+ * `validateHostIsPublic` against the next target.
  *
- * A small TOCTOU rebinding window exists between our DNS check and `fetch`'s
- * connect-time resolution; mitigated in practice by short DNS TTLs and the
- * fact that this fetcher runs in Vercel serverless (no VPC routes to internal
- * services). The alternative — rewriting the URL hostname to a pinned IP and
- * forwarding the original host via the `Host` header — breaks under
- * Node/undici because undici drives TLS SNI from the URL hostname, producing
- * `ssl/tls alert handshake failure` against any origin that requires correct
- * SNI (Cloudflare, GitHub Pages, etc.). The portable shape below works on
- * BOTH Bun and Node.
+ * A small TOCTOU rebinding window exists between the DNS check and
+ * `fetch`'s connect-time resolution; mitigated by short DNS TTLs and
+ * by running in environments with no VPC routes to internal services.
  *
- * CRITICAL FOOTGUN: Never reach for `undici.Agent` / `http.Agent` /
- * `connect.servername` tricks to keep the pinning approach alive on Node —
- * those constructs silently no-op on Bun (Bun's `fetch` ignores Node agents),
- * so any "fix" using them regresses Bun. Keep this implementation runtime-
- * agnostic.
- *
- * Returns a discriminated union; the caller pattern-matches `result.ok`.
+ * The portable shape — passing the original URL to `fetch` — is the only
+ * one that works on BOTH Bun and Node. The IP-pinning alternative breaks
+ * Node/undici (drives TLS SNI from the URL hostname → handshake failure
+ * against Cloudflare, GitHub Pages, etc.). Do NOT reach for
+ * `undici.Agent` / `http.Agent` / `connect.servername` to revive
+ * IP-pinning — those silently no-op on Bun.
  */
 export async function safeFetch(input: string, init: RequestInit = {}): Promise<FetchResult> {
   let target: URL;

@@ -14,26 +14,11 @@ export interface GrepMatch {
 
 /**
  * Case-insensitive literal substring search over a line-broken text.
- *
- * `pattern` is a single string. To OR-union multiple synonyms in one
- * call, separate alternatives with `|` — e.g. `"error|exception|fault"`
- * matches lines containing ANY of the three terms. Each alternative is
- * trimmed and lowercased; empty alternatives (from leading/trailing/
- * consecutive `|`) are discarded. Alternatives beyond `MAX_PATTERNS`
- * are silently dropped — the schema description steers the model, but
- * the runtime never rejects.
- *
- * Matches are returned in document order; the `MAX_MATCHES` cap is
- * applied across the union, not per alternative. Line numbers are
- * 1-based. Each match includes up to `CONTEXT_LINES` lines of context.
- *
- * Pipe-alternation replaces the prior `string | string[]` schema (ucs-8nl).
- * The model consistently produced pipe-joined synonym strings instead of
- * JSON arrays — the array form was awkward enough that it was effectively
- * unused. Both forms shared OR semantics; the pipe form just matches what
- * the model already writes. The OR motivation from ucs-0f3 still stands:
- * synonym exploration on RFC 7168 was the dominant tool-call sink, and
- * one pipe-joined call collapses N round-trips to 1.
+ * Pipe-separated `pattern` splits into OR-unioned alternatives (each
+ * trimmed/lowercased, empties dropped, capped at `MAX_PATTERNS`). The
+ * runtime silently caps rather than rejecting — the schema description
+ * steers the model. `MAX_MATCHES` applies across the union; line numbers
+ * are 1-based with `CONTEXT_LINES` of surrounding context.
  */
 export function grepLines(text: string, pattern: string): GrepMatch[] {
   const needles = pattern
@@ -63,11 +48,8 @@ export function grepLines(text: string, pattern: string): GrepMatch[] {
 }
 
 /**
- * Factory: builds a `grep_doc` AI SDK tool that closes over the provided text.
- * Use one factory call per chat request (closure-captures that request's document).
- *
- * `pattern` is a single string; separate synonyms with `|` for one-shot
- * OR-union exploration. See `grepLines` docstring + ucs-8nl motivation.
+ * Builds a `grep_doc` AI SDK tool closing over the request's document.
+ * One factory call per chat request.
  */
 export function makeGrepDoc(documentText: string) {
   return tool({
