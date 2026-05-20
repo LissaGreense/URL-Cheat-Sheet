@@ -53,13 +53,17 @@
 
 <div class="idle-state">
   <!--
-    Wordmark gets `scrambleIn` (Task 13). Pure text node, no child
-    components — scrambleText safely tweens the textContent without
-    mangling any nested DOM structure. The StatusPill below already
-    has its own `use:scrambleIn` (Task 9), so this + the pill cover
-    "scrambleIn on system labels" from the spec / AC.
+    Wordmark gets `scrambleIn` (Task 13). `scrambleIn` owns the
+    element's text content per the ucs-eem managed-content contract —
+    pass the wordmark via `text:` rather than as a child node. The
+    `aria-label` mirrors the wordmark so the a11y tree has the
+    canonical name even between SSR and the action's first paint.
   -->
-  <h1 class="wordmark" use:scrambleIn>URL_CHEAT_SHEET</h1>
+  <h1
+    class="wordmark"
+    aria-label="URL_CHEAT_SHEET"
+    use:scrambleIn={{ text: 'URL_CHEAT_SHEET' }}
+  ></h1>
 
   <p class="directive" use:splitLineReveal>LOAD URL TO YOUR MEMORY</p>
 
