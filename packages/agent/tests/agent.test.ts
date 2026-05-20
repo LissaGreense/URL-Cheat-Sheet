@@ -46,6 +46,13 @@ describe('SYSTEM_PROMPT', () => {
     expect(SYSTEM_PROMPT.toLowerCase()).toContain('do not estimate or round');
     expect(SYSTEM_PROMPT.toLowerCase()).toContain('uncited claims are forbidden');
   });
+
+  it('teaches strict refusal-with-citation', () => {
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('must cite at least one');
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('does not cover');
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('outline()');
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain('read_lines');
+  });
 });
 
 describe('streamChat', () => {
@@ -83,7 +90,7 @@ describe('streamChat', () => {
 
     const tools = vi.mocked(streamText).mock.calls[0]![0]!.tools;
     expect(tools).toBeDefined();
-    expect(Object.keys(tools!).sort()).toEqual(['finalize', 'grep_doc']);
+    expect(Object.keys(tools!).sort()).toEqual(['finalize', 'grep_doc', 'outline', 'read_lines']);
   });
 
   it('uses an array stopWhen of length 2 (step budget + hasToolCall(finalize))', async () => {
