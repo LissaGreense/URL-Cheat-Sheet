@@ -17,7 +17,8 @@ export async function streamChat(messages: UIMessage[], document: Document): Pro
     system: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
     tools: { grep_doc: makeGrepDoc(document.text) },
-    stopWhen: stepCountIs(5)
+    stopWhen: stepCountIs(5),
+    temperature: 0
   });
   return result.toUIMessageStreamResponse();
 }
