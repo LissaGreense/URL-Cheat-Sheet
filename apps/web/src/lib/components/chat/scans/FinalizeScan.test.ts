@@ -128,6 +128,26 @@ describe('FinalizeScan', () => {
     expect(container.textContent).toContain('The tea is steeped for 3 minutes.');
   });
 
+  it('ignores part.output even when present — finalize is input-only', () => {
+    // Sentinel contract pin: the `finalize` tool has no `execute`, so
+    // the SDK should never populate `part.output` — but if a future
+    // refactor wires one in by accident, the component must NOT render
+    // it. We construct a part with a populated `output` and an empty
+    // `input.answer` and assert the output string never reaches the DOM.
+    const SENTINEL_OUTPUT_TEXT = '__SHOULD_NOT_RENDER_THIS_OUTPUT__';
+    const part = {
+      type: 'tool-finalize',
+      toolCallId: 'call_1',
+      state: 'output-available',
+      input: { answer: undefined, citations: [] },
+      output: { answer: SENTINEL_OUTPUT_TEXT, text: SENTINEL_OUTPUT_TEXT }
+    } as unknown as FinalizePart;
+    const { container } = render(FinalizeScan, { props: { part } });
+    expect(container.textContent ?? '').not.toContain(SENTINEL_OUTPUT_TEXT);
+    // Pill should still reflect the COMPLETE state — chrome unaffected.
+    expect(container.querySelector('.status-pill')!.textContent?.trim()).toBe('[ COMPLETE ]');
+  });
+
   it('renders streaming answer text while state="input-streaming"', () => {
     const { container } = render(FinalizeScan, {
       props: {
