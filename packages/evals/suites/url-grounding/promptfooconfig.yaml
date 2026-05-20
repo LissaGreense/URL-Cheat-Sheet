@@ -39,6 +39,20 @@ tests:
     assert:
       - type: contains
         value: '2324'
+  # Trap cases anchor the navigation-tools fix (calibration rows 6 + 10).
+  # Each test relies on:
+  #   1. The global defaultTest L\d+ regex (citation required).
+  #   2. The global grounding-judge.ts JS assert (semantic groundedness — judge
+  #      threshold 0.7, distinguishes fabrication from named-disclaimer).
+  #   3. A per-case `contains: 'does not'` conformance check that the agent
+  #      followed the strict refusal phrasing from SYSTEM_PROMPT.
+  # Per-case `not-contains` keyword guards were removed after T6 (ucs-4il)
+  # observed a false positive on a *higher-quality* refusal that explicitly
+  # disclaimed absent terms ("Terms like matcha, sencha do not appear...").
+  # The judge correctly grades these as PASS; the keyword guards conflated
+  # named-fabrication with named-disclaimer. If T7 verification ever shows
+  # the judge accepting an actual fabrication, add fabrication-shape regex
+  # asserts (e.g. /supports? matcha/) rather than blanket keyword bans.
   - description: 'trap: HTCPCP does not specify encryption (must refuse, not fabricate)'
     vars:
       kb_url: https://www.rfc-editor.org/rfc/rfc2324.html
@@ -46,10 +60,6 @@ tests:
     assert:
       - type: contains
         value: 'does not'
-      - type: not-contains
-        value: 'AES'
-      - type: not-contains
-        value: 'ChaCha20'
   - description: 'trap: RFC 7168 does not specify Japanese tea varieties (must refuse, not fabricate)'
     vars:
       kb_url: https://www.rfc-editor.org/rfc/rfc7168.html
@@ -57,9 +67,3 @@ tests:
     assert:
       - type: contains
         value: 'does not'
-      - type: not-contains
-        value: 'matcha'
-      - type: not-contains
-        value: 'sencha'
-      - type: not-contains
-        value: 'hojicha'
