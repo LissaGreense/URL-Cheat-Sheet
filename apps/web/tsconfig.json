@@ -1,19 +1,27 @@
 {
-  "extends": "../../tsconfig.base.json",
+  // Extends the SvelteKit-generated tsconfig (per svelte-check's recommendation)
+  // so generated `./$types` modules under `.svelte-kit/types/` resolve
+  // correctly inside route files like `+server.ts` and `+page.svelte`. The
+  // base config (`tsconfig.base.json`) excludes `.svelte-kit/`, which broke
+  // this resolution. The compiler options below layer the project's strict
+  // settings on top of the generated config without disturbing SvelteKit's
+  // `paths`/`rootDirs` wiring.
+  "extends": "./.svelte-kit/tsconfig.json",
   "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "exactOptionalPropertyTypes": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
     "allowJs": true,
     "checkJs": true,
     "noEmit": true,
-    "moduleResolution": "bundler",
     "types": ["vite/client"]
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.js",
-    "src/**/*.svelte",
-    "tests/**/*.ts",
-    ".svelte-kit/ambient.d.ts",
-    ".svelte-kit/types/**/$types.d.ts"
-  ],
   "references": [{ "path": "../../packages/schemas" }, { "path": "../../packages/agent" }]
 }
