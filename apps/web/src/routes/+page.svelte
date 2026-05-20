@@ -398,6 +398,8 @@
         return 'Could not extract readable content (the page may be JavaScript-rendered).';
       case 'PARSE_FAILED':
         return 'Could not parse the page.';
+      case 'INTERNAL_ERROR':
+        return 'Something went wrong on our end. Please try again.';
     }
   }
 </script>
