@@ -1,8 +1,8 @@
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from 'promptfoo';
 import { extractContent, safeFetch, streamChat } from '@url-cheat-sheet/agent';
 import type { Document } from '@url-cheat-sheet/schemas';
-import { readUIMessageStream, uiMessageChunkSchema, type UIMessage, type UIMessageChunk } from 'ai';
-import { parseJsonEventStream, type ParseResult } from '@ai-sdk/provider-utils';
+import { uiMessageChunkSchema, type UIMessage } from 'ai';
+import { parseJsonEventStream } from '@ai-sdk/provider-utils';
 
 const DEFAULT_PROVIDER_ID = 'url-cheat-sheet:agent';
 
@@ -20,8 +20,8 @@ const DEFAULT_PROVIDER_ID = 'url-cheat-sheet:agent';
  * `streamChat` to produce a grounded answer. Failures from any stage are
  * surfaced as `{ error }` containing the discriminator `kind` so
  * promptfoo's UI shows actionable diagnostics. The streaming `Response`
- * is drained into a single aggregated assistant text via
- * `parseJsonEventStream` + `readUIMessageStream`.
+ * is drained for the model's `finalize` tool call (T5 contract) via
+ * `parseJsonEventStream`.
  */
 export default class AgentProvider implements ApiProvider {
   private readonly providerId: string;
@@ -89,13 +89,20 @@ export default class AgentProvider implements ApiProvider {
 }
 
 /**
- * Drain a UI-message SSE `Response` body and return the aggregated
- * assistant text. Uses the AI SDK v6 recipe:
+ * Drain a UI-message SSE `Response` body and return the assistant's
+ * `finalize` tool input rendered as user-visible text.
  *
- *   1. `parseJsonEventStream` turns the wire bytes into typed `ParseResult`s.
- *   2. A `TransformStream` drops failed parses and unwraps `value`.
- *   3. `readUIMessageStream` aggregates raw chunks into `UIMessage` snapshots.
- *   4. We keep only the last snapshot and join its text parts.
+ * After T5, the agent's `stopWhen: hasToolCall('finalize')` halts the loop
+ * the moment the model calls `finalize`. The model's "answer" arrives
+ * exclusively as the `input` field of a `tool-input-available` chunk whose
+ * `toolName === 'finalize'`. Free-form text deltas (`text-*` chunks) — if
+ * the model ever emits any against the prompt directive — are IGNORED:
+ * `finalize.answer` wins.
+ *
+ * Return shape:
+ *   - finalize present:  `answer` (plus ` (citations: L1, L2)` if any).
+ *   - finalize missing:  empty string. The judge's `ucs-xom` empty-output
+ *                        guard converts this into a hard failure.
  */
 async function drainAssistantText(response: Response): Promise<string> {
   if (!response.body) {
@@ -105,28 +112,29 @@ async function drainAssistantText(response: Response): Promise<string> {
     stream: response.body,
     schema: uiMessageChunkSchema
   });
-  const chunks = parsed.pipeThrough(
-    new TransformStream<ParseResult<UIMessageChunk>, UIMessageChunk>({
-      transform(parseResult, controller) {
-        if (parseResult.success) {
-          controller.enqueue(parseResult.value);
-        }
-      }
-    })
-  );
 
-  let last: UIMessage | undefined;
-  for await (const msg of readUIMessageStream({ stream: chunks })) {
-    last = msg;
+  let finalizeInput: { answer: string; citations: string[] } | undefined;
+  const reader = parsed.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value.success) continue;
+      const chunk = value.value;
+      if (chunk.type === 'tool-input-available' && chunk.toolName === 'finalize') {
+        // `input` is typed `unknown` on the wire; `finalize.inputSchema`
+        // guarantees the shape but isn't applied here (we trust the model
+        // contract). Cast at the boundary.
+        finalizeInput = chunk.input as { answer: string; citations: string[] };
+      }
+    }
+  } finally {
+    reader.releaseLock();
   }
 
-  // Aggregated `parts` use `{ type: 'text', text }` — distinct from wire
-  // chunks which use `{ type: 'text-delta', delta }`. Reversing these
-  // discriminators silently returns ''.
-  return (last?.parts ?? [])
-    .filter((p): p is Extract<typeof p, { type: 'text' }> => p.type === 'text')
-    .map((p) => p.text)
-    .join('');
+  if (!finalizeInput) return '';
+  const { answer, citations } = finalizeInput;
+  return citations.length ? `${answer} (citations: ${citations.join(', ')})` : answer;
 }
 
 type FetchFailureError = Extract<Awaited<ReturnType<typeof safeFetch>>, { ok: false }>['error'];

@@ -1,6 +1,7 @@
 export { streamChat } from './agent';
 export { SYSTEM_PROMPT } from './prompt';
 export { makeGrepDoc, grepLines, type GrepMatch } from './tools/grep-doc';
+export { finalize } from './tools/finalize';
 export {
   safeFetch,
   FETCH_DEFAULTS,

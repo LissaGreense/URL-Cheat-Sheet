@@ -10,23 +10,48 @@ vi.mock('@url-cheat-sheet/agent', () => ({
 }));
 
 /**
- * Build a `Response` whose body is a UI message event stream emitting the
- * given deltas as `text-delta` chunks framed by `text-start` / `text-end`.
+ * Build a `Response` whose body is a UI message event stream that ends
+ * with the model calling the `finalize` tool with the given args.
  *
  * Mirrors the on-wire format produced by
- * `streamText().toUIMessageStreamResponse()`: one JSON payload per `data: `
- * line, separated by blank lines (standard SSE). The `text-start` / `text-end`
- * bookends are mandatory — without them, `readUIMessageStream` will not
- * aggregate the deltas into a `TextUIPart`.
+ * `streamText().toUIMessageStreamResponse()` after T5: the assistant
+ * never emits free-form text; the answer arrives exclusively inside a
+ * `tool-input-available` chunk whose `toolName === 'finalize'` and
+ * `input` matches the finalize Zod schema.
+ *
+ * Chunk sequence (per `UIMessageChunk` union in `ai@6.0.184`):
+ *   start → start-step
+ *     → tool-input-start(toolName: 'finalize', toolCallId)
+ *     → tool-input-delta(inputTextDelta) × N  (raw JSON of args, streamed)
+ *     → tool-input-available(toolName: 'finalize', input: { answer, citations })
+ *   → finish-step → finish
+ *
+ * The deltas are illustrative — the drain only reads `tool-input-available`,
+ * so the parsed JSON arriving in `input` is what determines the test
+ * assertions. They're emitted here so the wire format reflects what the
+ * real model produces (and so test bugs around stream parsing surface).
  */
-function mockUIMessageStreamResponse(deltas: string[]): Response {
-  const textId = 't1';
+function mockUIMessageStreamFinalizeResponse(answer: string, citations: string[]): Response {
+  const toolCallId = 'call-1';
+  const argsJson = JSON.stringify({ answer, citations });
+  // Split into a few deltas so the mock looks like real chunked output.
+  const deltas = argsJson.length <= 8 ? [argsJson] : [argsJson.slice(0, 8), argsJson.slice(8)];
+
   const chunks: unknown[] = [
     { type: 'start' },
     { type: 'start-step' },
-    { type: 'text-start', id: textId },
-    ...deltas.map((delta) => ({ type: 'text-delta', id: textId, delta })),
-    { type: 'text-end', id: textId },
+    { type: 'tool-input-start', toolCallId, toolName: 'finalize' },
+    ...deltas.map((inputTextDelta) => ({
+      type: 'tool-input-delta',
+      toolCallId,
+      inputTextDelta
+    })),
+    {
+      type: 'tool-input-available',
+      toolCallId,
+      toolName: 'finalize',
+      input: { answer, citations }
+    },
     { type: 'finish-step' },
     { type: 'finish' }
   ];
@@ -133,10 +158,12 @@ describe('AgentProvider', () => {
     expect(vi.mocked(streamChat)).not.toHaveBeenCalled();
   });
 
-  it('drains the streamChat response and returns the joined text deltas as output', async () => {
+  it('returns the finalize.answer as output when no citations are supplied', async () => {
     vi.mocked(safeFetch).mockResolvedValueOnce(SUCCESSFUL_FETCH);
     vi.mocked(extractContent).mockReturnValueOnce({ text: 'doc text', title: 'T' });
-    vi.mocked(streamChat).mockResolvedValueOnce(mockUIMessageStreamResponse(['Hello ', 'world']));
+    vi.mocked(streamChat).mockResolvedValueOnce(
+      mockUIMessageStreamFinalizeResponse('Hello world', [])
+    );
 
     const provider = new AgentProvider();
     const result = await provider.callApi('', {
@@ -148,10 +175,58 @@ describe('AgentProvider', () => {
     expect(result.output).toBe('Hello world');
   });
 
+  it('appends a citations list to the output when finalize includes citations', async () => {
+    vi.mocked(safeFetch).mockResolvedValueOnce(SUCCESSFUL_FETCH);
+    vi.mocked(extractContent).mockReturnValueOnce({ text: 'doc text', title: 'T' });
+    vi.mocked(streamChat).mockResolvedValueOnce(
+      mockUIMessageStreamFinalizeResponse('It is RFC 2324', ['L1', 'L42'])
+    );
+
+    const provider = new AgentProvider();
+    const result = await provider.callApi('', {
+      vars: { kb_url: 'https://example.com', question: 'q' },
+      prompt: { raw: '', label: '' }
+    });
+
+    expect(result.output).toBe('It is RFC 2324 (citations: L1, L42)');
+  });
+
+  it('returns empty output when the stream never produces a finalize tool call', async () => {
+    vi.mocked(safeFetch).mockResolvedValueOnce(SUCCESSFUL_FETCH);
+    vi.mocked(extractContent).mockReturnValueOnce({ text: 'doc text', title: 'T' });
+    // Build a stream with only start/finish framing — no finalize chunk.
+    const body = [
+      { type: 'start' },
+      { type: 'start-step' },
+      { type: 'finish-step' },
+      { type: 'finish' }
+    ]
+      .map((c) => `data: ${JSON.stringify(c)}\n\n`)
+      .join('');
+    const emptyStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(body));
+        controller.close();
+      }
+    });
+    vi.mocked(streamChat).mockResolvedValueOnce(
+      new Response(emptyStream, { headers: { 'content-type': 'text/event-stream' } })
+    );
+
+    const provider = new AgentProvider();
+    const result = await provider.callApi('', {
+      vars: { kb_url: 'https://example.com', question: 'q' },
+      prompt: { raw: '', label: '' }
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('');
+  });
+
   it('passes a Document built from the fetch finalUrl and extract result to streamChat', async () => {
     vi.mocked(safeFetch).mockResolvedValueOnce(SUCCESSFUL_FETCH);
     vi.mocked(extractContent).mockReturnValueOnce({ text: 'doc text', title: 'T' });
-    vi.mocked(streamChat).mockResolvedValueOnce(mockUIMessageStreamResponse(['ok']));
+    vi.mocked(streamChat).mockResolvedValueOnce(mockUIMessageStreamFinalizeResponse('ok', []));
 
     const provider = new AgentProvider();
     await provider.callApi('', {
@@ -170,7 +245,7 @@ describe('AgentProvider', () => {
   it('passes a single user UIMessage with the question text and a non-empty id', async () => {
     vi.mocked(safeFetch).mockResolvedValueOnce(SUCCESSFUL_FETCH);
     vi.mocked(extractContent).mockReturnValueOnce({ text: 'doc text', title: 'T' });
-    vi.mocked(streamChat).mockResolvedValueOnce(mockUIMessageStreamResponse(['ok']));
+    vi.mocked(streamChat).mockResolvedValueOnce(mockUIMessageStreamFinalizeResponse('ok', []));
 
     const provider = new AgentProvider();
     await provider.callApi('', {
@@ -190,7 +265,7 @@ describe('AgentProvider', () => {
   it('attaches metadata.document with extracted text/title/sourceUrl on success', async () => {
     vi.mocked(safeFetch).mockResolvedValueOnce(SUCCESSFUL_FETCH);
     vi.mocked(extractContent).mockReturnValueOnce({ text: 'doc text', title: 'T' });
-    vi.mocked(streamChat).mockResolvedValueOnce(mockUIMessageStreamResponse(['ok']));
+    vi.mocked(streamChat).mockResolvedValueOnce(mockUIMessageStreamFinalizeResponse('ok', []));
 
     const provider = new AgentProvider();
     const result = await provider.callApi('', {
