@@ -1,6 +1,6 @@
 # ADR 0005: Branch-first + branch protection for `main`
 
-**Status:** accepted (with revised enforcement mechanism — see Addendum 2026-05-18)
+**Status:** accepted (enforcement returned to server-side after public flip — see Addendum 2026-05-20)
 **Date:** 2026-05-18
 **Spec:** [../specs/2026-05-18-agentic-pr-loop.md](../specs/2026-05-18-agentic-pr-loop.md)
 
@@ -90,3 +90,41 @@ PRs. Enforcement is local and convention-based:
 If the repo upgrades to GH Pro or goes public, applying
 `scripts/branch-protection.json` makes server-side required checks
 authoritative and the local preflight becomes defense-in-depth.
+
+## Addendum (2026-05-20): repo went public; server-side protection applied
+
+The repo is now public. The branch-protection payload from the
+(now-deleted) `scripts/branch-protection.json` has been applied to
+`main` via `gh api -X PUT … /branches/main/protection`. Current
+applied config (verified via `gh api … /branches/main/protection`):
+
+- `required_status_checks`: `typecheck`, `lint`, `test`, `build` (strict)
+- `required_linear_history: true`
+- `allow_force_pushes: false`, `allow_deletions: false`
+- `enforce_admins: false` (owner emergency escape)
+- `required_approving_review_count: 0` (gate tracked via `gate:review` bd label)
+
+Consequences:
+
+- `gh pr merge --auto --squash` is now safe — GitHub rejects merges
+  while any required check is failing, regardless of how the merge
+  is triggered. The 2026-05-19 addendum's concern about `--auto`
+  bypassing red CI is resolved server-side.
+- **`scripts/safe-merge.sh` is deleted.** Its only job was to refuse
+  merge on red CI when GitHub didn't. Use `gh pr merge --squash
+  --delete-branch` directly for chore PRs. Feature PRs still go
+  through the orchestrator, which keeps its own preflight as
+  defense-in-depth.
+- **`scripts/branch-protection.json` is deleted.** The live config is
+  fetchable from `gh api repos/<owner>/<repo>/branches/main/protection`;
+  a local snapshot adds drift risk without authority. Re-apply via that
+  endpoint with `-X PUT --input -` if it ever needs restoring.
+- The local pre-push hook (`scripts/git-hooks/pre-push`) and
+  `scripts/setup-git-hooks.sh` are **kept as defense-in-depth** —
+  they fail before the round-trip to GitHub and work offline. Still
+  recommended on first clone of any worktree.
+
+Net effect: enforcement is back where the original Decision section
+described it — server-side at GitHub, with the local hook as a
+fast-fail mirror. The 2026-05-18 and 2026-05-19 addendums describe a
+~48-hour window that no longer reflects reality.
