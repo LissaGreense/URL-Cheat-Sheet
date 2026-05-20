@@ -3,7 +3,10 @@ import { SYSTEM_PROMPT } from '../src/prompt.ts';
 import { makeGrepDoc } from '../src/tools/grep-doc.ts';
 import { streamChat } from '../src/agent.ts';
 import { stepCountIs, streamText, type UIMessage } from 'ai';
+import { createAnthropic } from '@ai-sdk/anthropic';
 import type { Document } from '@url-cheat-sheet/schemas';
+
+const toUIMessageStreamResponseMock = vi.fn(() => new Response(''));
 
 vi.mock('ai', async () => {
   const actual = await vi.importActual<typeof import('ai')>('ai');
@@ -11,8 +14,23 @@ vi.mock('ai', async () => {
     ...actual,
     stepCountIs: vi.fn(actual.stepCountIs),
     streamText: vi.fn(() => ({
-      toUIMessageStreamResponse: () => new Response('')
+      toUIMessageStreamResponse: (...args: unknown[]) => toUIMessageStreamResponseMock(...args)
     }))
+  };
+});
+
+/**
+ * The `createAnthropic` factory is mocked so tests can intercept the apiKey
+ * that `streamChat` threads in. The returned "provider" is just a function
+ * that ignores its model-id argument and returns a sentinel — `streamText`
+ * is itself mocked, so it never tries to introspect the model shape.
+ */
+const fakeModelSentinel = { __fake: 'model' };
+vi.mock('@ai-sdk/anthropic', async () => {
+  const actual = await vi.importActual<typeof import('@ai-sdk/anthropic')>('@ai-sdk/anthropic');
+  return {
+    ...actual,
+    createAnthropic: vi.fn(() => () => fakeModelSentinel)
   };
 });
 
@@ -63,10 +81,13 @@ describe('streamChat', () => {
     sourceUrl: 'https://example.com/doc',
     headings: []
   };
+  const apiKey = 'sk-ant-test';
 
   beforeEach(() => {
     vi.mocked(streamText).mockClear();
     vi.mocked(stepCountIs).mockClear();
+    vi.mocked(createAnthropic).mockClear();
+    toUIMessageStreamResponseMock.mockClear();
   });
 
   it('is callable (verified at type level)', () => {
@@ -79,14 +100,14 @@ describe('streamChat', () => {
   });
 
   it('passes temperature: 0 to streamText for grounded QA reproducibility', async () => {
-    await streamChat(messages, document);
+    await streamChat(messages, document, apiKey);
 
     expect(vi.mocked(streamText)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(streamText).mock.calls[0]![0]!.temperature).toBe(0);
   });
 
   it('registers both grep_doc and finalize tools', async () => {
-    await streamChat(messages, document);
+    await streamChat(messages, document, apiKey);
 
     const tools = vi.mocked(streamText).mock.calls[0]![0]!.tools;
     expect(tools).toBeDefined();
@@ -94,7 +115,7 @@ describe('streamChat', () => {
   });
 
   it('uses an array stopWhen of length 2 (step budget + hasToolCall(finalize))', async () => {
-    await streamChat(messages, document);
+    await streamChat(messages, document, apiKey);
 
     const { stopWhen } = vi.mocked(streamText).mock.calls[0]![0]!;
     expect(Array.isArray(stopWhen)).toBe(true);
@@ -102,13 +123,13 @@ describe('streamChat', () => {
   });
 
   it('uses a step budget of 12 (10 exploration + 1 voluntary-finalize + 1 forced-finalize)', async () => {
-    await streamChat(messages, document);
+    await streamChat(messages, document, apiKey);
 
     expect(vi.mocked(stepCountIs)).toHaveBeenCalledWith(12);
   });
 
   it('forces toolChoice: finalize on the last allowed step (ucs-0f3 structural fix)', async () => {
-    await streamChat(messages, document);
+    await streamChat(messages, document, apiKey);
 
     const { prepareStep } = vi.mocked(streamText).mock.calls[0]![0]!;
     expect(typeof prepareStep).toBe('function');
@@ -130,5 +151,72 @@ describe('streamChat', () => {
       experimental_context: undefined
     });
     expect(early).toBeUndefined();
+  });
+
+  it('constructs a per-request Anthropic provider with the supplied apiKey', async () => {
+    await streamChat(messages, document, apiKey);
+
+    expect(vi.mocked(createAnthropic)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(createAnthropic).mock.calls[0]![0]).toEqual({ apiKey });
+  });
+
+  it('forwards abortSignal into streamText when supplied', async () => {
+    const controller = new AbortController();
+    await streamChat(messages, document, apiKey, controller.signal);
+
+    expect(vi.mocked(streamText).mock.calls[0]![0]!.abortSignal).toBe(controller.signal);
+  });
+
+  it('omits abortSignal from streamText when not supplied', async () => {
+    await streamChat(messages, document, apiKey);
+
+    expect(vi.mocked(streamText).mock.calls[0]![0]!.abortSignal).toBeUndefined();
+  });
+
+  it('passes an onError handler to streamText that never logs the response body', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await streamChat(messages, document, apiKey);
+      const { onError } = vi.mocked(streamText).mock.calls[0]![0]!;
+      expect(typeof onError).toBe('function');
+
+      // Hand the handler an error that intentionally carries a secret-bearing
+      // responseBody — the contract is that the handler MUST NOT pass that
+      // object into any console.* call. We assert the spy was either not
+      // invoked, or invoked with arguments that do not contain the secret.
+      const err = new Error('boom');
+      (err as unknown as { responseBody: string }).responseBody =
+        '{"messages":[...],"apiKey":"sk-ant-LEAK"}';
+      (err as unknown as { statusCode: number }).statusCode = 500;
+      onError!({ error: err });
+
+      for (const call of consoleSpy.mock.calls) {
+        const flat = JSON.stringify(call);
+        expect(flat).not.toMatch(/sk-ant-LEAK/);
+        expect(flat).not.toMatch(/responseBody/);
+      }
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it("passes onError to toUIMessageStreamResponse that returns a fixed 'Upstream provider error' string", async () => {
+    await streamChat(messages, document, apiKey);
+
+    expect(toUIMessageStreamResponseMock).toHaveBeenCalledTimes(1);
+    const opts = toUIMessageStreamResponseMock.mock.calls[0]![0] as
+      | { onError?: (e: unknown) => string }
+      | undefined;
+    expect(typeof opts?.onError).toBe('function');
+
+    // Regardless of the underlying error shape, the override returns the
+    // fixed string — the AI SDK default String(err) would otherwise splash
+    // the provider's echoed request payload into the client stream.
+    const leakyErr = new Error('rate limit');
+    (leakyErr as unknown as { responseBody: string }).responseBody =
+      '{"apiKey":"sk-ant-LEAK"}';
+    expect(opts!.onError!(leakyErr)).toBe('Upstream provider error');
+    expect(opts!.onError!('plain string error')).toBe('Upstream provider error');
+    expect(opts!.onError!(undefined)).toBe('Upstream provider error');
   });
 });

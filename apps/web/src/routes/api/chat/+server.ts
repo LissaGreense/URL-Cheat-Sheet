@@ -29,5 +29,10 @@ export const POST: RequestHandler = async ({ request }) => {
   // Schema validates structure (id, role, parts: unknown[]); AI SDK
   // validates each part shape inside convertToModelMessages. One
   // boundary cast bridges the two type worlds.
-  return streamChat(parsed.data.messages as UIMessage[], parsed.data.document);
+  //
+  // NOTE: `apiKey` is threaded here only to satisfy `streamChat`'s new
+  // required signature (ucs-9bk). The full Task 3 surface — env-check
+  // removal, AbortSignal threading, APICallError-shaped error branches
+  // — is owned by ucs-qdp and is not in scope here.
+  return streamChat(parsed.data.messages as UIMessage[], parsed.data.document, parsed.data.apiKey);
 };
