@@ -18,6 +18,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/svelte';
 import HudPanelHost from './HudPanel.test-host.svelte';
+// Vite ?raw import: the full Svelte source as a string. Used by the
+// ucs-jno cascade-order regression test below.
+import hudPanelSource from './HudPanel.svelte?raw';
 
 afterEach(() => {
   cleanup();
@@ -71,5 +74,42 @@ describe('HudPanel', () => {
     const { container } = render(HudPanelHost);
     const panel = container.querySelector('.hud-panel');
     expect(panel!.classList.contains('hud-panel--alarm')).toBe(false);
+  });
+
+  /*
+    ucs-jno regression: in the original v1 of HudPanel the alarm-variant
+    override on `.hud-panel--alarm .hud-panel__corner { border-color: ... }`
+    was declared *before* the per-corner `.hud-panel__corner--tl|tr|bl|br`
+    rules that re-set `border-top|right|bottom|left: 1px solid var(--hair)`
+    as shorthands. Because shorthand border declarations write
+    `border-*-color` too, the alarm rule lost on cascade and the corner
+    brackets stayed bone-colored while the panel went amber.
+
+    jsdom can't resolve Svelte's scoped styles, but it CAN parse the
+    component's source file and check the *order* of the relevant
+    selectors — the test below reads the .svelte source, locates the
+    alarm-corner rule and the per-corner rules, and asserts the alarm
+    rule comes after. This is a regression guard tied to the cascade
+    contract, not a visual computed-style assertion.
+  */
+  it('declares the alarm-corner override AFTER the per-corner border rules (ucs-jno)', () => {
+    const src = hudPanelSource as string;
+
+    const alarmIdx = src.indexOf('.hud-panel--alarm .hud-panel__corner');
+    expect(alarmIdx, 'alarm-corner override selector missing').toBeGreaterThan(-1);
+
+    for (const cornerSel of [
+      '.hud-panel__corner--tl',
+      '.hud-panel__corner--tr',
+      '.hud-panel__corner--bl',
+      '.hud-panel__corner--br'
+    ]) {
+      const cornerIdx = src.indexOf(cornerSel + ' {');
+      expect(cornerIdx, `${cornerSel} declaration missing`).toBeGreaterThan(-1);
+      expect(
+        alarmIdx,
+        `alarm-corner override must come AFTER ${cornerSel} or shorthand cascade wins`
+      ).toBeGreaterThan(cornerIdx);
+    }
   });
 });

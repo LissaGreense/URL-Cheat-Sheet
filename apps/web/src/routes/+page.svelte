@@ -1,22 +1,117 @@
-<script lang="ts">
-  import { Chat } from '@ai-sdk/svelte';
-  import { DefaultChatTransport } from 'ai';
-  import type { Document, ExtractResponse, ExtractError } from '@url-cheat-sheet/schemas';
-  import IdleState from '../lib/components/states/IdleState.svelte';
-  import ExtractingState from '../lib/components/states/ExtractingState.svelte';
+<script module lang="ts">
+  import type { Document, ExtractResponse } from '@url-cheat-sheet/schemas';
 
+  /**
+   * The state-machine union for the page. `errorCode` was added to the
+   * extract-error branch in ucs-9g9 so the ExtractErrorState component
+   * can render the raw `ExtractError['kind']` (e.g. FETCH_TIMEOUT) in
+   * sys-voice micro-caps next to the humanized message — required by
+   * §4.3 of the spec. The network-failure fallback path (catch block,
+   * no ExtractError body) uses the synthetic 'NETWORK_FAILURE' code
+   * since no schema kind covers a transport error.
+   */
   type State =
     | { kind: 'idle' }
     | { kind: 'extracting'; url: string }
-    | { kind: 'extract-error'; message: string }
+    | { kind: 'extract-error'; message: string; errorCode: string }
     | { kind: 'flagged'; preview: ExtractResponse }
     | { kind: 'ready'; document: Document };
+
+  /**
+   * Resolve a dev-mode `?state=<kind>` query-param override to a synthetic
+   * `State` with seed data, bypassing the real state machine. Returns
+   * `null` when not in dev mode, when the param is absent, or when the
+   * param value is not one of the known kinds.
+   *
+   * This helper is invoked from the page component inside a guard that
+   * checks `import.meta.env.DEV`, so Vite's tree-shaker drops the entire
+   * override branch from production bundles (spec §6.5).
+   *
+   * @param searchParams - The current URL's search params.
+   * @returns A synthetic `State` for visual review, or `null`.
+   */
+  function resolveDevStateOverride(searchParams: URLSearchParams): State | null {
+    const kind = searchParams.get('state');
+    if (!kind) return null;
+    switch (kind) {
+      case 'idle':
+        return { kind: 'idle' };
+      case 'extracting':
+        return { kind: 'extracting', url: 'https://example.com/dev-fixture' };
+      case 'error':
+        return {
+          kind: 'extract-error',
+          message: 'Dev override error.',
+          errorCode: 'FETCH_TIMEOUT'
+        };
+      case 'flagged':
+        return {
+          kind: 'flagged',
+          preview: {
+            text: 'Dev override extracted text.',
+            title: 'Dev Override Flagged Page',
+            sourceUrl: 'https://example.com/flagged-dev',
+            headings: [],
+            byteSize: 100,
+            scan: {
+              safe: false,
+              threats: [
+                { type: 'instruction-override', severity: 0.7 },
+                { type: 'delimiter', severity: 0.3 }
+              ]
+            }
+          }
+        };
+      case 'ready':
+        return {
+          kind: 'ready',
+          document: {
+            text: 'Dev override document body.',
+            title: 'Dev Override Ready Doc',
+            sourceUrl: 'https://example.com/ready-dev',
+            headings: []
+          }
+        };
+      default:
+        return null;
+    }
+  }
+</script>
+
+<script lang="ts">
+  import { Chat } from '@ai-sdk/svelte';
+  import { DefaultChatTransport } from 'ai';
+  import { page } from '$app/state';
+  import type { ExtractError } from '@url-cheat-sheet/schemas';
+  import IdleState from '../lib/components/states/IdleState.svelte';
+  import ExtractingState from '../lib/components/states/ExtractingState.svelte';
+  import ExtractErrorState from '../lib/components/states/ExtractErrorState.svelte';
+  import FlaggedState from '../lib/components/states/FlaggedState.svelte';
+  import ReadyState from '../lib/components/states/ReadyState.svelte';
 
   let state = $state<State>({ kind: 'idle' });
   let urlInput = $state('');
   let chatInput = $state('');
 
-  let document = $derived(state.kind === 'ready' ? state.document : null);
+  /**
+   * Dev-mode-only synthetic state derived from the URL's `?state=<kind>`
+   * search param. In production builds the entire branch is removed by
+   * Vite's tree-shaker (the `if (!import.meta.env.DEV)` early-return
+   * leaves the constant `null` in its place, and the `?? state` fallback
+   * collapses to the real state machine). Spec §6.5.
+   */
+  const overrideState = $derived.by<State | null>(() => {
+    if (!import.meta.env.DEV) return null;
+    return resolveDevStateOverride(page.url.searchParams);
+  });
+
+  /**
+   * The state the template actually renders. Equals `overrideState` when
+   * a dev override is active, otherwise the real state-machine value.
+   */
+  const renderState = $derived<State>(overrideState ?? state);
+
+  let document = $derived(renderState.kind === 'ready' ? renderState.document : null);
 
   const chat = new Chat({
     transport: new DefaultChatTransport({
@@ -40,7 +135,8 @@
       });
       const body = await res.json();
       if (!res.ok) {
-        state = { kind: 'extract-error', message: humanizeError(body as ExtractError) };
+        const err = body as ExtractError;
+        state = { kind: 'extract-error', message: humanizeError(err), errorCode: err.kind };
         return;
       }
       const preview = body as ExtractResponse;
@@ -58,7 +154,11 @@
         }
       };
     } catch (err) {
-      state = { kind: 'extract-error', message: 'Network error: ' + String(err) };
+      state = {
+        kind: 'extract-error',
+        message: 'Network error: ' + String(err),
+        errorCode: 'NETWORK_FAILURE'
+      };
     }
   }
 
@@ -85,28 +185,6 @@
     chatInput = '';
   }
 
-  /**
-   * Returns true when the assistant message already contains the
-   * `finalize` tool call (in any state). Used to suppress the
-   * "Thinking…" placeholder once the model has begun streaming its
-   * final answer.
-   */
-  function hasFinalize(parts: ReadonlyArray<{ type: string }>): boolean {
-    return parts.some((p) => p.type === 'tool-finalize');
-  }
-
-  /**
-   * True when the user has submitted a question but no assistant
-   * message has been appended yet. The Chat client transitions
-   * `status` to `submitted` synchronously inside `sendMessage`, but
-   * the assistant message only appears once the SSE stream opens.
-   * Without this guard, the UI sits silent in that gap.
-   */
-  let awaitingAssistant = $derived(
-    chat.status === 'submitted' &&
-      (chat.messages.length === 0 || chat.messages[chat.messages.length - 1]!.role === 'user')
-  );
-
   function humanizeError(err: ExtractError): string {
     switch (err.kind) {
       case 'FETCH_TIMEOUT':
@@ -129,194 +207,24 @@
   }
 </script>
 
-<main class="container">
-  <h1>URL Cheat Sheet</h1>
-
-  {#if state.kind === 'idle'}
-    <IdleState bind:urlInput onSubmit={loadUrl} />
-  {:else if state.kind === 'extracting'}
-    <ExtractingState url={state.url} />
-  {:else if state.kind === 'extract-error'}
-    <p class="error">{state.message}</p>
-    <button type="button" onclick={reset}>Try a different URL</button>
-  {:else if state.kind === 'flagged'}
-    <section class="flagged">
-      <h2>⚠ Possible prompt-injection patterns detected</h2>
-      <p><strong>Page:</strong> {state.preview.title}</p>
-      <p><strong>URL:</strong> {state.preview.sourceUrl}</p>
-      <p>Detected:</p>
-      <ul>
-        {#each state.preview.scan.threats as t (t.type + t.severity)}
-          <li>{t.type} (severity {t.severity.toFixed(2)})</li>
-        {/each}
-      </ul>
-      <p class="hint">
-        This often happens with pages that discuss AI security or quote attack examples. Your chat
-        will treat this page as an untrusted source whether or not you continue.
-      </p>
-      <button type="button" onclick={confirmFlagged}>Continue with this page</button>
-      <button type="button" onclick={reset}>Use a different URL</button>
-    </section>
-  {:else if state.kind === 'ready'}
-    <p class="chip">
-      Grounded in: <strong>{state.document.title}</strong> ·
-      <button type="button" class="link" onclick={reset}>change</button>
-    </p>
-
-    <ol class="messages">
-      {#each chat.messages as message (message.id)}
-        <li class="message message--{message.role}">
-          <span class="role">{message.role}</span>
-          {#each message.parts as part, i (i)}
-            {#if part.type === 'text'}
-              <p class="text">{part.text}</p>
-            {:else if part.type === 'tool-finalize'}
-              {@const input = part.input as { answer?: string; citations?: string[] } | undefined}
-              {#if part.state === 'input-available' || part.state === 'output-available'}
-                <p class="text">{input?.answer ?? ''}</p>
-                {#if input?.citations && input.citations.length > 0}
-                  <p class="citations">
-                    Citations: {input.citations.join(', ')}
-                  </p>
-                {/if}
-              {:else if part.state === 'input-streaming'}
-                {#if input?.answer}
-                  <p class="text streaming">{input.answer}</p>
-                {:else}
-                  <p class="text streaming muted">Thinking…</p>
-                {/if}
-              {/if}
-            {:else if part.type === 'tool-grep_doc'}
-              <details class="tool">
-                <summary>searched the document ({part.state})</summary>
-                <pre>{JSON.stringify(part, null, 2)}</pre>
-              </details>
-            {:else if part.type?.startsWith('tool-') || part.type === 'dynamic-tool'}
-              <details class="tool">
-                <summary>tool call: {part.type}</summary>
-                <pre>{JSON.stringify(part, null, 2)}</pre>
-              </details>
-            {/if}
-          {/each}
-          {#if message.role === 'assistant' && !hasFinalize(message.parts) && (chat.status === 'submitted' || chat.status === 'streaming')}
-            <p class="text muted">Thinking…</p>
-          {/if}
-        </li>
-      {/each}
-      {#if awaitingAssistant}
-        <li class="message message--assistant">
-          <span class="role">assistant</span>
-          <p class="text muted">Thinking…</p>
-        </li>
-      {/if}
-    </ol>
-
-    <form onsubmit={sendChat} class="composer">
-      <input
-        type="text"
-        bind:value={chatInput}
-        placeholder="Ask about this page..."
-        aria-label="Message"
-        disabled={chat.status === 'streaming' || chat.status === 'submitted'}
-      />
-      <button type="submit" disabled={!chatInput.trim() || chat.status === 'streaming'}>Send</button
-      >
-    </form>
-  {/if}
-</main>
-
-<style>
-  .container {
-    max-width: 48rem;
-    margin: 2rem auto;
-    padding: 0 1rem;
-    font-family: ui-sans-serif, system-ui, sans-serif;
-  }
-  .hint {
-    color: #666;
-    font-size: 0.9rem;
-  }
-  .error {
-    color: #b00;
-  }
-  .chip {
-    background: #f0f0f0;
-    padding: 0.5rem 0.75rem;
-    border-radius: 4px;
-    font-size: 0.9rem;
-  }
-  .flagged {
-    border: 1px solid #e0a;
-    padding: 1rem;
-    border-radius: 6px;
-  }
-  .flagged h2 {
-    margin-top: 0;
-  }
-  .messages {
-    list-style: none;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  .message {
-    border: 1px solid #e5e5e5;
-    border-radius: 6px;
-    padding: 0.75rem 1rem;
-  }
-  .message--user {
-    background: #f7f7f7;
-  }
-  .role {
-    display: block;
-    font-size: 0.75rem;
-    color: #888;
-    text-transform: uppercase;
-    margin-bottom: 0.25rem;
-  }
-  .text {
-    margin: 0;
-    white-space: pre-wrap;
-  }
-  .text.streaming {
-    opacity: 0.85;
-  }
-  .text.muted,
-  .muted {
-    color: #888;
-    font-style: italic;
-  }
-  .citations {
-    margin: 0.5rem 0 0;
-    font-size: 0.85rem;
-    color: #555;
-  }
-  .tool {
-    margin-top: 0.5rem;
-    font-size: 0.8rem;
-  }
-  .tool pre {
-    background: #f0f0f0;
-    padding: 0.5rem;
-    overflow-x: auto;
-  }
-  .composer {
-    display: flex;
-    gap: 0.5rem;
-    margin-top: 1rem;
-  }
-  .composer input {
-    flex: 1;
-    padding: 0.5rem;
-    font-size: 1rem;
-  }
-  .link {
-    background: none;
-    border: none;
-    color: #06c;
-    cursor: pointer;
-    padding: 0;
-    font-size: inherit;
-  }
-</style>
+{#if renderState.kind === 'idle'}
+  <IdleState bind:urlInput onSubmit={loadUrl} />
+{:else if renderState.kind === 'extracting'}
+  <ExtractingState url={renderState.url} />
+{:else if renderState.kind === 'extract-error'}
+  <ExtractErrorState
+    message={renderState.message}
+    errorCode={renderState.errorCode}
+    onReset={reset}
+  />
+{:else if renderState.kind === 'flagged'}
+  <FlaggedState preview={renderState.preview} onContinue={confirmFlagged} onReset={reset} />
+{:else if renderState.kind === 'ready'}
+  <ReadyState
+    document={renderState.document}
+    {chat}
+    bind:chatInput
+    onSendChat={sendChat}
+    onReset={reset}
+  />
+{/if}
