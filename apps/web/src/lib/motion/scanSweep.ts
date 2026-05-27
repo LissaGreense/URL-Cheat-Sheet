@@ -48,6 +48,7 @@
  */
 import { gsap } from 'gsap';
 import type { ActionReturn } from 'svelte/action';
+import { EASE_OUT_EXPO } from './_curves';
 import { prefersReducedMotion } from './_reducedMotion';
 
 /**
@@ -75,11 +76,6 @@ export type ScanSweepParams = {
 export const SCAN_SWEEP_LINE_SELECTOR = '.scan-sweep__line';
 
 const DEFAULT_DURATION_MS = 600;
-
-// Spec §3.1 — `--ease-out-expo` mirrored verbatim from tokens.css so
-// JS-driven tweens match CSS-driven ones (GSAP can't read CSS var()s
-// from a string literal — it needs a parseable ease).
-const EASE_OUT_EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
 /**
  * Apply a scanline sweep to `node` on mount and on every `trigger`

@@ -35,6 +35,7 @@
 import { gsap } from 'gsap';
 import { SplitText } from 'gsap/SplitText';
 import type { ActionReturn } from 'svelte/action';
+import { EASE_OUT_EXPO } from './_curves';
 import { prefersReducedMotion } from './_reducedMotion';
 
 /**
@@ -57,11 +58,6 @@ export type SplitLineRevealParams = {
 const DEFAULT_STAGGER_MS = 60;
 const DEFAULT_DURATION_MS = 800;
 const DEFAULT_DELAY_MS = 0;
-
-// Spec §3.1 — `--ease-out-expo` mirrored verbatim from tokens.css so
-// the JS-driven tweens match the CSS-driven ones (CSS `var()` can't
-// be read from a JS string literal here — GSAP needs a parseable ease).
-const EASE_OUT_EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
 /**
  * Apply a split-line reveal to `node` on mount.

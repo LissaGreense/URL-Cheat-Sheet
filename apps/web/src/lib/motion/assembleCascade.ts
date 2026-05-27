@@ -40,6 +40,7 @@
  */
 import { gsap } from 'gsap';
 import type { ActionReturn } from 'svelte/action';
+import { EASE_OUT_EXPO } from './_curves';
 import { prefersReducedMotion } from './_reducedMotion';
 import { scrambleIn } from './scrambleIn';
 
@@ -82,8 +83,6 @@ export const LINE_SELECTOR = '.finalize__line';
 
 const BAR_TWEEN_DURATION_MS = 240;
 const PER_LINE_SCRAMBLE_MS = 180;
-
-const EASE_OUT_EXPO = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
 /**
  * Compute the `height: NN%` string for the compile bar from the
