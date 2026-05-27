@@ -218,4 +218,69 @@ describe('streamChat', () => {
     expect(opts!.onError!('plain string error')).toBe('Upstream provider error');
     expect(opts!.onError!(undefined)).toBe('Upstream provider error');
   });
+
+  /**
+   * ucs-3bh: `AI_MissingToolResultsError` regression on multi-turn chat.
+   *
+   * Reproduction: a multi-turn chat history accumulates an assistant
+   * message containing a tool part whose state never advanced past
+   * `input-available` (e.g. the previous stream was aborted mid-tool-
+   * execution, or a provider hiccup closed the SSE before the
+   * `tool-output-available` chunk landed). On the next turn the client
+   * re-sends the full message-history. `convertToModelMessages` emits
+   * a `tool-call` for that part but no matching `tool-result`, and the
+   * model-prompt validator inside `streamText` throws
+   * `AI_MissingToolResultsError` — surfacing in server logs as the
+   * intermittent 2nd-or-3rd-turn failure the issue describes.
+   *
+   * Contract: `streamChat` MUST pass `ignoreIncompleteToolCalls: true`
+   * to `convertToModelMessages` so dangling `input-streaming` /
+   * `input-available` tool parts are stripped before prompt validation
+   * runs. This test inspects the messages handed to `streamText` (the
+   * mocked seam) and asserts every `tool-call` in any assistant
+   * message has a matching `tool-result` in a downstream tool message.
+   */
+  it('strips dangling tool-call parts so a multi-turn history with an aborted tool never throws MissingToolResultsError', async () => {
+    const multiTurn: UIMessage[] = [
+      { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'first question' }] },
+      {
+        id: 'a1',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-grep_doc',
+            toolCallId: 'call_orphan',
+            state: 'input-available',
+            input: { pattern: 'foo' }
+          } as never
+        ]
+      },
+      { id: 'u2', role: 'user', parts: [{ type: 'text', text: 'second question' }] }
+    ];
+
+    await streamChat(multiTurn, document, apiKey);
+
+    const passed = vi.mocked(streamText).mock.calls[0]![0]!.messages as Array<{
+      role: string;
+      content: Array<{ type: string; toolCallId?: string }>;
+    }>;
+
+    const calledIds = new Set<string>();
+    const resultIds = new Set<string>();
+    for (const m of passed) {
+      if (m.role === 'assistant') {
+        for (const c of m.content) {
+          if (c.type === 'tool-call' && c.toolCallId) calledIds.add(c.toolCallId);
+        }
+      } else if (m.role === 'tool') {
+        for (const c of m.content) {
+          if (c.type === 'tool-result' && c.toolCallId) resultIds.add(c.toolCallId);
+        }
+      }
+    }
+    for (const id of calledIds) {
+      expect(resultIds.has(id), `tool-call ${id} has no matching tool-result`).toBe(true);
+    }
+    expect(calledIds.has('call_orphan')).toBe(false);
+  });
 });

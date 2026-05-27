@@ -48,7 +48,14 @@ export async function streamChat(
   const result = streamText({
     model: provider('claude-sonnet-4-6'),
     system: SYSTEM_PROMPT,
-    messages: await convertToModelMessages(messages),
+    // ucs-3bh: `ignoreIncompleteToolCalls` strips dangling tool parts
+    // (state `input-streaming` / `input-available`) before prompt
+    // validation. Without it, a previous turn that was aborted or
+    // errored mid-tool-execution leaves a `tool-call` in the UI
+    // message-history with no matching `tool-result`; the next turn's
+    // `convertToModelMessages` emits the call, and `streamText`'s
+    // model-prompt validator throws `AI_MissingToolResultsError`.
+    messages: await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
     tools,
     stopWhen: [stepCountIs(STEP_BUDGET), hasToolCall('finalize')],
     temperature: 0,
