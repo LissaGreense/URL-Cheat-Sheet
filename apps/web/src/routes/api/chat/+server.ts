@@ -4,6 +4,16 @@ import { streamChat } from '@url-cheat-sheet/agent';
 import { chatRequestSchema } from '@url-cheat-sheet/schemas';
 
 /**
+ * Hard ceiling for /api/chat request bodies. A hostile or buggy client
+ * that streams a multi-megabyte body would otherwise spend the user's
+ * Anthropic quota in one call before the schema parse even runs. 1 MiB
+ * is well above the legitimate ceiling for a Chat client payload (UI
+ * messages + extracted-doc text capped earlier in the pipeline) and
+ * leaves ample headroom for future fields.
+ */
+const MAX_CHAT_PAYLOAD_BYTES = 1024 * 1024;
+
+/**
  * Chat endpoint. Validates the @ai-sdk/svelte Chat client body (now
  * including the per-request grounding document and the user-supplied
  * `apiKey`), then streams the model response back via the AI SDK's UI
@@ -36,6 +46,20 @@ import { chatRequestSchema } from '@url-cheat-sheet/schemas';
  * land there; Vercel does not log request bodies by default).
  */
 export const POST: RequestHandler = async ({ request }) => {
+  // Cheapest correct check: trust the advertised `content-length` and
+  // reject before we ever touch `request.json()` (which would buffer the
+  // whole body into memory). Absent or unparseable header → fall through
+  // and let downstream parsing handle it; modern fetch clients always
+  // set content-length on fixed-size bodies, and the schema parse below
+  // bounds memory in the no-header case via SvelteKit's body limit.
+  const contentLengthHeader = request.headers.get('content-length');
+  if (contentLengthHeader !== null) {
+    const contentLength = Number(contentLengthHeader);
+    if (Number.isFinite(contentLength) && contentLength > MAX_CHAT_PAYLOAD_BYTES) {
+      return json({ error: 'payload_too_large', limit: MAX_CHAT_PAYLOAD_BYTES }, { status: 413 });
+    }
+  }
+
   let raw: unknown;
   try {
     raw = await request.json();
