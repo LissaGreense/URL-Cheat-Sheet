@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadDotenv } from './load-env';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(scriptDir, '..');
@@ -23,13 +24,23 @@ if (!suite) {
 const cfg = join(packageRoot, 'suites', suite, 'promptfooconfig.yaml');
 const outputPath = join(tmpdir(), `promptfoo-${suite}-${Date.now()}.json`);
 
+// Bun only auto-loads `.env` from the subprocess's cwd. We pin cwd to
+// `packageRoot` (so `bunx` resolves the workspace-installed `promptfoo`
+// and the providers' `@url-cheat-sheet/*` symlinks), which means the
+// user's repo-root `.env` is invisible to the child. Load it here and
+// merge under `process.env` so an explicitly exported value still wins
+// over the on-disk file — matching the precedence `dotenv` and most
+// shells use.
+const dotenvFromRepoRoot = loadDotenv(join(repoRoot, '.env'));
+const childEnv = { ...dotenvFromRepoRoot, ...process.env };
+
 // Run from packageRoot so bunx resolves the locally-installed promptfoo
 // (and the workspace symlinks the provider needs) instead of downloading
 // a stand-alone copy that can't see `@url-cheat-sheet/*`.
 const result = spawnSync(
   'bunx',
   ['promptfoo', 'eval', '-c', cfg, '--no-cache', '--output', outputPath],
-  { encoding: 'utf8', cwd: packageRoot }
+  { encoding: 'utf8', cwd: packageRoot, env: childEnv }
 );
 
 // promptfoo exit codes: 0 = all pass, 100 = some tests failed (run completed).
