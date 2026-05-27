@@ -23,7 +23,8 @@
     "eval": "bun --filter '@url-cheat-sheet/evals' eval",
     "bv": "bv",
     "deploy": "vercel deploy --target preview -y --no-wait",
-    "deploy:prod": "vercel deploy --prod -y --no-wait"
+    "deploy:prod": "vercel deploy --prod -y --no-wait",
+    "bake:atmosphere-mobile": "bun scripts/bake-atmosphere-mobile.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
