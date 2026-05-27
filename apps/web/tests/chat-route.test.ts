@@ -34,7 +34,54 @@ const FIXTURE_DOCUMENT = {
 const FIXTURE_MESSAGES = [{ id: '1', role: 'user', parts: [{ type: 'text', text: 'hi' }] }];
 const FIXTURE_API_KEY = 'sk-ant-test-key';
 
+/**
+ * Build a request that advertises a `content-length` larger than the
+ * server's payload guard without actually allocating that many bytes —
+ * we only want to exercise the header-based pre-parse rejection path.
+ */
+function makeOversizeRequest(advertisedBytes: number): Request {
+  return new Request('http://localhost/api/chat', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'content-length': String(advertisedBytes)
+    },
+    body: '{}'
+  });
+}
+
 describe('POST /api/chat', () => {
+  it('413s when content-length exceeds the 1 MiB guard', async () => {
+    const POST = await importPost();
+    const res = await POST({
+      request: makeOversizeRequest(1024 * 1024 + 1)
+    } as never);
+    expect(res.status).toBe(413);
+    const payload = (await res.json()) as { error: string; limit: number };
+    expect(payload.error).toBe('payload_too_large');
+    expect(payload.limit).toBe(1024 * 1024);
+    expect(streamChatMock).not.toHaveBeenCalled();
+  });
+
+  it('passes through when payload is at or under the 1 MiB guard', async () => {
+    streamChatMock.mockResolvedValue(
+      new Response('stream-body', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      })
+    );
+    const POST = await importPost();
+    const res = await POST({
+      request: makeRequest({
+        messages: FIXTURE_MESSAGES,
+        document: FIXTURE_DOCUMENT,
+        apiKey: FIXTURE_API_KEY
+      })
+    } as never);
+    expect(res.status).toBe(200);
+    expect(streamChatMock).toHaveBeenCalledOnce();
+  });
+
   it('400s on malformed body', async () => {
     const POST = await importPost();
     const res = await POST({ request: makeRequest({ wrong: 'shape' }) } as never);
