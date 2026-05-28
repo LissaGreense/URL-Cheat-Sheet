@@ -1,5 +1,4 @@
-<img width="3392" height="1896" alt="image" src="https://github.com/user-attachments/assets/55b4a7f5-83e2-4f9e-b0b4-513875898e20" />
-
+<img width="3394" height="1896" alt="image" src="https://github.com/user-attachments/assets/fdccfcd5-dcfd-4873-82b8-ced5579a2bd4" />
 
 # URL Cheat Sheet
 
@@ -31,6 +30,9 @@ without reading it end to end.
    source lines. Long sessions stay anchored to what the page actually says.
 
 Chatting uses your own Anthropic API key (see [Bring your own key](#bring-your-own-key)).
+
+<img width="3392" height="1922" alt="image" src="https://github.com/user-attachments/assets/3f0a1484-9c96-440e-ad80-ec17793dcd24" />
+
 
 **Agent tools** (`packages/agent/src/tools/`):
 
