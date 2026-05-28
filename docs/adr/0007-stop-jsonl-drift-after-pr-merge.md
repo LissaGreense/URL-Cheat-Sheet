@@ -1,6 +1,6 @@
 # ADR 0007: Stop `.beads/issues.jsonl` drift after `pr-merge`
 
-**Status:** accepted
+**Status:** superseded by [ADR 0010](0010-dolt-remote-supersedes-jsonl-sync.md)
 **Date:** 2026-05-19
 **bd issue:** ucs-lyf
 

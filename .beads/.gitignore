@@ -12,6 +12,10 @@ last-touched
 # Daemon runtime (lock, log, pid)
 daemon.*
 
+# Issue snapshot (export from Dolt; sync canonical lives in refs/dolt/data
+# on the git remote — see ADR 0010). Kept local for `bv` viewer compat.
+issues.jsonl
+
 # Interactions log (runtime, not versioned)
 interactions.jsonl
 

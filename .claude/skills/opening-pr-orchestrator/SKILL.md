@@ -39,6 +39,12 @@ REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
 # worktrees with 0755; bd expects 0700. Idempotent.
 [ -d .beads ] && chmod 700 .beads
 
+# Pull latest bd state from the Dolt remote so this worktree sees claims/
+# closures from any parallel orchestrator. Same machine shares bd DB via git
+# common-directory discovery (bd v1.x), but for cross-machine sync this is
+# load-bearing. See ADR 0010.
+bd dolt pull
+
 # Materialize workspace node_modules. `git worktree add` creates an independent
 # working tree that does NOT share node_modules with the main repo, so the
 # first `bun run`/`bunx vitest`/`bun packages/evals/...` invocation would
@@ -162,39 +168,41 @@ REMAINING_GATES="$(bd show "$ID" --json | jq -r '.[0].labels[]? | select(test("^
 STATUS="$(bd show "$ID" --json | jq -r '.[0].status')"
 [ "$STATUS" != "in_review" ] && { echo "abort: bd status is '$STATUS', expected in_review"; exit 1; }
 
+# Capture branch name before the worktree goes (gh can read it from the PR;
+# we need it for explicit remote+local branch deletion below).
+BRANCH="$(gh pr view "$PR_URL" --json headRefName -q .headRefName)"
+
 # Step out of the worktree before removing it (git refuses to remove
 # the worktree you're standing in or to delete a branch a worktree holds).
 cd "$(git rev-parse --git-common-dir)/.."   # → main repo root
 git worktree remove "../wt-$ID" --force
 
-# Merge — safe to use --delete-branch now that the worktree is gone.
-gh pr merge "$PR_URL" --squash --delete-branch
+# Merge. Intentionally NOT using --delete-branch: gh internally does
+# `git checkout main && git pull` to clean up, which fails when main is
+# held by a sibling worktree (silently — the merge succeeds, cleanup
+# doesn't, and local feat branches pile up). We do the deletes
+# ourselves below, which works regardless of where main lives.
+gh pr merge "$PR_URL" --squash
+
 git fetch origin main
 SHA="$(git ls-remote origin main | awk '{print $1}')"
 bd update "$ID" --remove-label "gate:pr"
 bd close "$ID" --reason "Merged in $SHA"
 
-# Sync local main. Stash any .beads/ drift (issues.jsonl, metadata.json,
-# config.yaml — anything bd may have auto-touched during the close
-# above) so the fast-forward doesn't refuse; drop the stash so the
-# working tree matches origin/main exactly.
-#
-# Stash scope is the whole .beads/ directory rather than just
-# issues.jsonl: with concurrent orchestrators, another pipeline's bd
-# writes can land in metadata.json or config.yaml during this window,
-# and a narrower stash would let those slip through and make
-# `git pull --ff-only` refuse. Runtime files in .beads/ (dolt/, locks,
-# etc.) are gitignored so the stash skips them.
-#
-# We intentionally do NOT re-export .beads/issues.jsonl here. bd's Dolt
-# DB carries the post-close state; the jsonl snapshot trails by one
-# cycle and catches up in the next PR's bd auto-commits. Re-exporting
-# would leave the working tree dirty on main after every merge, and
-# that drift then leaked into every subsequent worktree's bootstrap
-# commit. See ADR 0007.
-git stash push -m "wip bd state" .beads/ 2>/dev/null || true
+# Publish the closure to the Dolt remote so the next worktree
+# bootstrap (anywhere) sees this issue as closed. See ADR 0010.
+bd dolt push
+
+# Explicit branch cleanup (replaces gh's --delete-branch). The local
+# branch may have already gone when we removed the worktree; -D is
+# idempotent enough that "branch not found" is fine.
+git push origin --delete "$BRANCH" 2>/dev/null || true
+git branch -D "$BRANCH" 2>/dev/null || true
+
+# Sync local main. With .beads/issues.jsonl + interactions.jsonl
+# gitignored (ADR 0010), the stash dance from ADR 0007 is gone — bd
+# auto-writes can't dirty the working tree for tracked files anymore.
 git pull --ff-only
-git stash drop 2>/dev/null || true
 ```
 
 ## Gate clearance — reviewer protocol

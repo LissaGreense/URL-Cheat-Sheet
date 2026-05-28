@@ -53,3 +53,19 @@ if bd merge-slot check 2>&1 | grep -q "not found"; then
 else
   echo "✓ bd merge slot already provisioned"
 fi
+
+# Provision the Dolt sync remote (see ADR 0010). Stores bd state under
+# refs/dolt/data in the same GitHub repo — no DoltHub, no separate service.
+# `.beads/config.yaml` carries `sync.remote: ...` for the URL, but the live
+# Dolt remote is per-machine and has to be added on each clone.
+echo
+ORIGIN_URL="$(bd config get sync.remote 2>/dev/null | tail -1 | tr -d '"')"
+if [ -z "$ORIGIN_URL" ]; then
+  echo "⚠ No sync.remote configured in .beads/config.yaml — skipping Dolt remote setup"
+elif bd dolt remote list 2>&1 | grep -q "^origin"; then
+  echo "✓ bd Dolt remote 'origin' already configured"
+else
+  bd dolt remote add origin "$ORIGIN_URL"
+  echo "✓ Added bd Dolt remote 'origin' → $ORIGIN_URL"
+  echo "  Run 'bd dolt pull' to populate local Dolt DB from remote."
+fi
