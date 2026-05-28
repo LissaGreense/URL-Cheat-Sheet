@@ -24,7 +24,7 @@
  * — `vi.hoisted` so the mock survives the import-hoisting dance.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup } from '@testing-library/svelte';
 import { tick } from 'svelte';
 
@@ -152,6 +152,56 @@ describe('CinematicTransition — happy path (motion enabled)', () => {
     await tick();
 
     expect(container.querySelector('.cinematic-transition')).not.toBeNull();
+  });
+});
+
+describe('CinematicTransition — completion fallback (GSAP onComplete never fires)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    // Restore real timers so the reduced-motion suite (which relies on
+    // microtask `tick()` flushing) isn't poisoned by the fake clock.
+    vi.useRealTimers();
+  });
+
+  it('fires onComplete via a bounded fallback timer when the timeline never completes', async () => {
+    const onComplete = vi.fn();
+
+    render(CinematicTransition, {
+      props: { from: 'extracting', to: 'ready', onComplete }
+    });
+    await tick();
+
+    // Simulate a throttled/paused RAF (e.g. background tab): GSAP's
+    // captured `onComplete` is NEVER invoked. The user must still
+    // advance to `ready` — the fallback timer is the only thing that
+    // can unstick them.
+    expect(onComplete).not.toHaveBeenCalled();
+
+    // Advance past the cinematic duration + buffer. The fallback must
+    // have force-fired `onComplete` by now.
+    vi.advanceTimersByTime(2000);
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not double-fire when both the timeline and the fallback would complete', async () => {
+    const onComplete = vi.fn();
+
+    render(CinematicTransition, {
+      props: { from: 'extracting', to: 'ready', onComplete }
+    });
+    await tick();
+
+    // GSAP's timeline finishes normally first…
+    timelineStub.__fireOnComplete();
+    expect(onComplete).toHaveBeenCalledTimes(1);
+
+    // …then the fallback window elapses. It must NOT fire a second time.
+    vi.advanceTimersByTime(2000);
+    expect(onComplete).toHaveBeenCalledTimes(1);
   });
 });
 

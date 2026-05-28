@@ -449,7 +449,17 @@
 
 {#if renderState.kind === 'idle'}
   <IdleState bind:urlInput onSubmit={loadUrl} />
-{:else if renderState.kind === 'extracting'}
+{:else if renderState.kind === 'extracting' && !transitioning}
+  <!--
+    `&& !transitioning` makes the live `ExtractingState` and the
+    `CinematicTransition` overlay MUTUALLY EXCLUSIVE (ucs-apq). During
+    the extracting → ready handoff `renderState.kind` stays `'extracting'`
+    *while* `transitioning` is true; without this guard both the live
+    extracting visual (its bar + READING pill) and the overlay (its own
+    bar/panel) rendered at once — the visible duplication. The overlay
+    already carries the full from→to visual, so the live state must not
+    render underneath it.
+  -->
   <ExtractingState url={renderState.url} />
 {:else if renderState.kind === 'extract-error'}
   <ExtractErrorState

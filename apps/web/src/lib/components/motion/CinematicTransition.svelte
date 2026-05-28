@@ -25,6 +25,24 @@
   next render with no visible animation. No GSAP runtime touches the
   DOM in reduced mode.
 
+  ## Completion fallback (ucs-apq — never strand the user)
+
+  GSAP drives the timeline via `requestAnimationFrame`. Browsers throttle
+  or fully pause rAF for non-foreground tabs, so the timeline's
+  `onComplete` is not guaranteed to fire — which previously stranded the
+  user on the `extracting` visual indefinitely. To make completion
+  unconditional, every completion path routes through a single `complete()`
+  wrapper guarded by a `completed` flag (so it fires the prop exactly
+  once), and `onMount` arms two fallbacks alongside the timeline:
+
+    - a max-duration `setTimeout` (`--dur-cinema` 1600ms + buffer), and
+    - a `visibilitychange` advance — when a backgrounded tab returns to
+      the foreground, advance immediately rather than waiting out the
+      remainder of the (now-resumed) timer.
+
+  Whichever fires first wins; the rest are no-ops via the guard. Both
+  fallbacks are torn down on unmount.
+
   ## Why the prop signature is narrow
 
   `from: 'extracting'` and `to: 'ready'` are literal string types —
@@ -69,6 +87,14 @@
   let panel: HTMLDivElement;
   let chatSurface: HTMLDivElement;
 
+  /**
+   * Cinematic duration (`--dur-cinema` = 1600ms) plus a 300ms buffer so
+   * the fallback only fires *after* a healthy timeline would normally
+   * have completed — it never pre-empts the real animation in the common
+   * foreground case.
+   */
+  const FALLBACK_MS = 1900;
+
   onMount(() => {
     // ADR 0009 strict fallback: skip the timeline entirely. Fire the
     // completion callback synchronously so the parent's state machine
@@ -79,13 +105,44 @@
       return;
     }
 
+    // Once-only guard. Every completion path — the GSAP timeline's
+    // `onComplete`, the max-duration timeout, and the visibilitychange
+    // advance — routes through `complete()`. The first to fire wins; the
+    // rest are no-ops. This keeps the prop callback firing exactly once
+    // even though three independent signals can request completion.
+    let completed = false;
+    function complete(): void {
+      if (completed) return;
+      completed = true;
+      onComplete();
+    }
+
     // Single timeline — keeps the choreography deterministic and lets
     // the parent rely on a single `onComplete` event firing when the
     // last beat finishes. Each `.to` is positioned with relative offsets
     // ('-=N') so the bar→panel→chat beats overlap without one waiting
     // for the previous to fully complete (matches spec §4.2's
-    // "simultaneously" language).
-    const tl = gsap.timeline({ onComplete });
+    // "simultaneously" language). The timeline reports completion through
+    // the same `complete()` guard as the fallbacks.
+    const tl = gsap.timeline({ onComplete: complete });
+
+    // Fallback 1: a max-duration timeout. rAF (and thus the timeline's
+    // `onComplete`) can be throttled or paused for backgrounded tabs;
+    // this timer guarantees the user advances to `ready` even if the
+    // timeline never reports completion. Timers are also throttled in
+    // background tabs but, unlike a stalled timeline, resume and fire on
+    // foreground — so completion is always reached within bounded time.
+    const fallbackTimer = setTimeout(complete, FALLBACK_MS);
+
+    // Fallback 2: visibilitychange-aware advance. When a backgrounded tab
+    // (where rAF was paused) returns to the foreground, advance right
+    // away rather than waiting out the remainder of the resumed timer —
+    // the cinematic moment is already over for a tab the user left and
+    // came back to.
+    function onVisibilityChange(): void {
+      if (document.visibilityState === 'visible') complete();
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     // Beat 1: vertical bar completes top-to-bottom in `--dur-cinema / 2`.
     // The bar starts at scaleY(0) (Phase 1's extracting bar idle frame)
@@ -130,12 +187,16 @@
       '-=0.3'
     );
 
-    // Cleanup: kill the timeline if the component unmounts mid-flight.
-    // GSAP timelines that target detached nodes won't crash, but the
-    // RAF-driven ticker would keep churning until the timeline finishes
-    // naturally — kill explicitly to release that work.
+    // Cleanup: kill the timeline if the component unmounts mid-flight,
+    // and tear down both fallbacks. GSAP timelines that target detached
+    // nodes won't crash, but the RAF-driven ticker would keep churning
+    // until the timeline finishes naturally — kill explicitly to release
+    // that work. The timeout and listener must be removed so they can't
+    // fire `complete()` after unmount.
     return () => {
       tl.kill();
+      clearTimeout(fallbackTimer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   });
 </script>
@@ -159,9 +220,16 @@
          state behind this overlay; this is what visually "folds away". -->
     <div class="cinematic-transition__panel-body"></div>
   </div>
+  <!--
+    Chat surface stand-in — opacity/scale reveal only. The greeting text
+    is deliberately NOT rendered here: `ReadyState` is the single owner of
+    "URL has been loaded to your memory." (ucs-apq). Baking a static copy
+    here meant the overlay's greeting and ReadyState's greeting could be
+    on screen simultaneously during the handoff — a visible double. The
+    cinematic "to" reveal (the materializing composer surface) stays
+    intact; only the duplicated copy is removed.
+  -->
   <div bind:this={chatSurface} class="cinematic-transition__chat">
-    <p class="cinematic-transition__greeting">URL has been loaded to your memory.</p>
-    <p class="cinematic-transition__greeting">Ask questions to get knowledge access.</p>
     <div class="cinematic-transition__composer-placeholder"></div>
   </div>
 </div>
@@ -220,10 +288,9 @@
 
   /*
     The chat surface starts at opacity 0 + scale 0.96 so the timeline
-    can settle it to opacity 1 + scale 1. The greeting text is rendered
-    statically (no splitLineReveal here — the actual ReadyState owns
-    the splitLineReveal on the real greeting; this is purely a visual
-    stand-in for the materializing surface during the cross-fade).
+    can settle it to opacity 1 + scale 1. It carries no greeting text —
+    ReadyState owns the greeting (and its splitLineReveal); this is purely
+    a visual stand-in for the materializing surface during the cross-fade.
   */
   .cinematic-transition__chat {
     width: min(36rem, calc(100vw - 4rem));
@@ -232,14 +299,6 @@
     gap: 1rem;
     opacity: 0;
     transform: scale(0.96);
-  }
-
-  .cinematic-transition__greeting {
-    margin: 0;
-    font-family: var(--font-body);
-    font-size: 1rem;
-    line-height: 1.55;
-    color: var(--bone-dim);
   }
 
   /*
