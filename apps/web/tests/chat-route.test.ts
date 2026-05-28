@@ -50,6 +50,24 @@ function makeOversizeRequest(advertisedBytes: number): Request {
   });
 }
 
+/**
+ * Build a request whose body is a literal JSON string and which carries
+ * NO `content-length` header. Both the WHATWG `Request` constructor (node,
+ * bun) and jsdom's implementation leave `content-length` unset for a
+ * string body unless the caller sets it explicitly — verified in the test
+ * harness — so this faithfully exercises the header-less production path
+ * the Vercel adapter exposes (it calls `server.respond()` directly,
+ * bypassing SvelteKit's `getRequest`/`bodySizeLimit`). The body-measure
+ * backstop must reject on actual byte count, not on the advertised header.
+ */
+function makeNoLengthRequest(body: string): Request {
+  return new Request('http://localhost/api/chat', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body
+  });
+}
+
 describe('POST /api/chat', () => {
   it('413s when content-length exceeds the 1 MiB guard', async () => {
     const POST = await importPost();
@@ -60,6 +78,80 @@ describe('POST /api/chat', () => {
     const payload = (await res.json()) as { error: string; limit: number };
     expect(payload.error).toBe('payload_too_large');
     expect(payload.limit).toBe(1024 * 1024);
+    expect(streamChatMock).not.toHaveBeenCalled();
+  });
+
+  it('413s when a body WITHOUT content-length exceeds the 1 MiB guard', async () => {
+    // No `content-length` header (the harness leaves it unset for a
+    // string body), so the cheap header check cannot fire — only the
+    // body-measure backstop can reject this. The padding lives inside a
+    // valid-JSON string so the request is well-formed; the only thing
+    // wrong with it is its size.
+    const oversize = JSON.stringify({ pad: 'z'.repeat(1024 * 1024 + 1) });
+    const request = makeNoLengthRequest(oversize);
+    expect(request.headers.get('content-length')).toBeNull();
+    const POST = await importPost();
+    const res = await POST({ request } as never);
+    expect(res.status).toBe(413);
+    const payload = (await res.json()) as { error: string; limit: number };
+    expect(payload.error).toBe('payload_too_large');
+    expect(payload.limit).toBe(1024 * 1024);
+    expect(streamChatMock).not.toHaveBeenCalled();
+  });
+
+  it('passes through a body WITHOUT content-length that is under the 1 MiB guard', async () => {
+    streamChatMock.mockResolvedValue(
+      new Response('stream-body', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      })
+    );
+    const request = makeNoLengthRequest(
+      JSON.stringify({
+        messages: FIXTURE_MESSAGES,
+        document: FIXTURE_DOCUMENT,
+        apiKey: FIXTURE_API_KEY
+      })
+    );
+    expect(request.headers.get('content-length')).toBeNull();
+    const POST = await importPost();
+    const res = await POST({ request } as never);
+    expect(res.status).toBe(200);
+    expect(streamChatMock).toHaveBeenCalledOnce();
+  });
+
+  // Chunked transfer encoding (`Transfer-Encoding: chunked`) is the wire
+  // framing for a streamed body with no declared length. By the time this
+  // handler runs, the adapter has already reassembled the request as a
+  // WHATWG `Request`; the handler never sees the chunk frames. It reads
+  // the reassembled body via `request.text()` and measures the decoded
+  // byte length — so a chunked, header-less upload over the limit is
+  // caught by the same backstop. We can't synthesise true on-the-wire
+  // chunking in the WHATWG `Request` test harness (constructing a Request
+  // from a ReadableStream still yields a content-length of `null`, i.e.
+  // identical to the header-less string case already covered above), so
+  // the header-less test stands in for the chunked case at the layer this
+  // handler operates on.
+  it('measures the decoded body for a header-less request regardless of wire framing', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(JSON.stringify({ pad: 'q'.repeat(1024 * 1024 + 1) }))
+        );
+        controller.close();
+      }
+    });
+    const request = new Request('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: stream,
+      // `duplex` is required by the spec when streaming a request body.
+      duplex: 'half'
+    } as RequestInit & { duplex: 'half' });
+    expect(request.headers.get('content-length')).toBeNull();
+    const POST = await importPost();
+    const res = await POST({ request } as never);
+    expect(res.status).toBe(413);
     expect(streamChatMock).not.toHaveBeenCalled();
   });
 
