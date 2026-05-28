@@ -53,4 +53,4 @@ issue-prefix: "ucs"
 # - github.org
 # - github.repo
 
-sync.remote: "git+https://github.com/LissaGreense/URL-Cheat-Sheet.git"
+sync.remote: "git+ssh://git@github.com/LissaGreense/URL-Cheat-Sheet.git"
