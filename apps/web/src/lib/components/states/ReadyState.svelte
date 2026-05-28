@@ -221,6 +221,7 @@
     screen.
   */
   .ready-state {
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;

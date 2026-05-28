@@ -97,6 +97,7 @@
     tightens slightly so the error screen feels arrested, not roomy.
   */
   .extract-error-state {
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
