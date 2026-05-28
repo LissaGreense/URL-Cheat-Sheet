@@ -3,7 +3,17 @@
 
 # URL Cheat Sheet
 
-A web app where you drop a URL and chat with an agent that has read it.
+Paste a URL, then chat with an agent that has actually read the page.
+
+### ▸ Live demo — https://url-cheat-sheet.vercel.app
+
+A small personal demo with a futuristic, cinematic interface. Drop in any
+article or doc, watch it get ingested, then ask questions and get answers
+grounded in the page — with citations. The look is half the point: a dark,
+phosphor-green "cinematic memex HUD" with scramble-in text, ambient
+atmosphere layers, and a clean cross-fade between states.
+
+Chatting uses your own Anthropic API key (see [Bring your own key](#bring-your-own-key)).
 
 ## What's here
 
@@ -27,11 +37,14 @@ four tools wired to the extracted document.
 - `POST /api/chat` — streaming chat via Vercel AI SDK v6.
 - `GET /api/health` — liveness.
 
-The BYO Anthropic key spec
-([`docs/specs/2026-05-20-byo-anthropic-key.md`](docs/specs/2026-05-20-byo-anthropic-key.md))
-is mid-flight — the `SettingsDrawer.svelte` component shipped, but
-the wiring into `+page.svelte` (key bound into the chat request)
-isn't done yet.
+## Bring your own key
+
+Chatting needs an Anthropic API key — paste it into the settings (⚙)
+drawer. The key is held **in memory only** (never `localStorage`, disk,
+or any other store) and is sent with the chat request for that turn;
+close or restore the tab and it's gone. See the spec at
+[`docs/specs/2026-05-20-byo-anthropic-key.md`](docs/specs/2026-05-20-byo-anthropic-key.md).
+Extraction (`/api/extract`) needs no key — only the chat does.
 
 ## Quick start
 
