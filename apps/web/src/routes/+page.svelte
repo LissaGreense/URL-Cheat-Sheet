@@ -83,15 +83,16 @@
   import { DefaultChatTransport } from 'ai';
   import { page } from '$app/state';
   import { tick } from 'svelte';
+  import { fade } from 'svelte/transition';
   import type { ExtractError } from '@url-cheat-sheet/schemas';
   import IdleState from '../lib/components/states/IdleState.svelte';
   import ExtractingState from '../lib/components/states/ExtractingState.svelte';
   import ExtractErrorState from '../lib/components/states/ExtractErrorState.svelte';
   import FlaggedState from '../lib/components/states/FlaggedState.svelte';
   import ReadyState from '../lib/components/states/ReadyState.svelte';
-  import CinematicTransition from '../lib/components/motion/CinematicTransition.svelte';
   import SettingsDrawer from '$lib/components/SettingsDrawer.svelte';
   import { classifyChatError, INLINE_ERROR_COPY } from '$lib/chat-error';
+  import { prefersReducedMotion } from '$lib/motion/_reducedMotion';
 
   // Renamed from `state` to `pageState` to dodge a svelte-check
   // resolution quirk: when the reactive variable is literally named
@@ -143,24 +144,6 @@
    * unrelated re-render while `chat.error` is still set.
    */
   let lastRoutedErrorMessage: string | undefined = undefined;
-
-  /**
-   * Cinematic-transition handoff state (Task 13, spec §4.2). When the
-   * state machine wants to advance from `extracting` to `ready`, we
-   * stash the pending Document here and hold `pageState` at `extracting`
-   * — the `<CinematicTransition>` overlay then runs the GSAP timeline
-   * and fires `onComplete`, at which point we flip `pageState` to the
-   * pending `ready` and clear this rune.
-   *
-   * Reduced-motion users path through the same handoff, but
-   * `CinematicTransition` calls `onComplete` synchronously on mount —
-   * so the flip happens on the same render tick the overlay appears,
-   * collapsing the cinematic moment to an instant state swap with no
-   * visible animation.
-   *
-   * Anchors at `null` when no transition is in flight (the common case).
-   */
-  let pendingReady = $state<Document | null>(null);
 
   /**
    * Dev-mode-only synthetic state derived from the URL's `?state=<kind>`
@@ -222,16 +205,20 @@
         pageState = { kind: 'flagged', preview };
         return;
       }
-      // Cinematic handoff (Task 13): keep `pageState` at `extracting`
-      // and stash the pending Document. The `<CinematicTransition>`
-      // overlay below renders while `pendingReady` is non-null and
-      // fires `advanceToReady` when its timeline completes (or
-      // synchronously under reduced-motion).
-      pendingReady = {
-        text: preview.text,
-        title: preview.title,
-        sourceUrl: preview.sourceUrl,
-        headings: preview.headings
+      // Safe extraction → advance straight to `ready`. The
+      // extracting → ready handoff is now a cosmetic opacity cross-fade
+      // (Svelte's built-in `fade` on the conditional branches below),
+      // so the state flips synchronously here with no overlay, no
+      // pending stash, and no completion callback (ucs-52o, superseding
+      // the cinematic overlay from ucs-apq).
+      pageState = {
+        kind: 'ready',
+        document: {
+          text: preview.text,
+          title: preview.title,
+          sourceUrl: preview.sourceUrl,
+          headings: preview.headings
+        }
       };
     } catch (err) {
       pageState = {
@@ -265,39 +252,17 @@
     pageState = { kind: 'idle' };
     urlInput = '';
     chat.messages = [];
-    // Defensive: a reset mid-transition should drop any pending handoff.
-    // (Today's UI has no reset button visible during extracting, but
-    // future surfaces — e.g. an abort gesture — might invoke this.)
-    pendingReady = null;
   }
 
   /**
-   * `<CinematicTransition>` completion handler (Task 13). Called either
-   * after the GSAP timeline finishes (~1600ms) or synchronously on
-   * mount under reduced-motion. Flips `pageState` to the stashed
-   * `ready` and clears the handoff rune so the overlay unmounts on
-   * the next render.
-   *
-   * Guarded so a stray invocation with no pending handoff (e.g. a
-   * unit-test forcing the callback) is a safe no-op.
+   * Cross-fade duration (ms) for the extracting → ready (and other
+   * state) swaps. ADR 0009: reduced-motion collapses this to `0` for an
+   * instant, animation-free swap. `prefersReducedMotion()` is SSR-safe
+   * (returns `false` when `window` is undefined) and reads `matchMedia`
+   * lazily, so this is a `$derived` rather than a module constant —
+   * Svelte re-evaluates it client-side once the preference is readable.
    */
-  function advanceToReady(): void {
-    if (pendingReady === null) return;
-    pageState = { kind: 'ready', document: pendingReady };
-    pendingReady = null;
-  }
-
-  /**
-   * `transitioning` — true while the cinematic extracting → ready
-   * overlay should render. Derived from the existence of a pending
-   * `ready` document plus a non-overridden `extracting` underlying
-   * state. The dev-mode `?state=` override bypasses the transition
-   * entirely (the override path is for visual review of static
-   * states, not orchestration).
-   */
-  const transitioning = $derived(
-    overrideState === null && pageState.kind === 'extracting' && pendingReady !== null
-  );
+  const fadeDuration = $derived(prefersReducedMotion() ? 0 : 250);
 
   function sendChat(e: SubmitEvent) {
     e.preventDefault();
@@ -447,56 +412,86 @@
   </aside>
 {/if}
 
-{#if renderState.kind === 'idle'}
-  <IdleState bind:urlInput onSubmit={loadUrl} />
-{:else if renderState.kind === 'extracting' && !transitioning}
-  <!--
-    `&& !transitioning` makes the live `ExtractingState` and the
-    `CinematicTransition` overlay MUTUALLY EXCLUSIVE (ucs-apq). During
-    the extracting → ready handoff `renderState.kind` stays `'extracting'`
-    *while* `transitioning` is true; without this guard both the live
-    extracting visual (its bar + READING pill) and the overlay (its own
-    bar/panel) rendered at once — the visible duplication. The overlay
-    already carries the full from→to visual, so the live state must not
-    render underneath it.
-  -->
-  <ExtractingState url={renderState.url} />
-{:else if renderState.kind === 'extract-error'}
-  <ExtractErrorState
-    message={renderState.message}
-    errorCode={renderState.errorCode}
-    onReset={reset}
-  />
-{:else if renderState.kind === 'flagged'}
-  <FlaggedState preview={renderState.preview} onContinue={confirmFlagged} onReset={reset} />
-{:else if renderState.kind === 'ready'}
-  <ReadyState
-    document={renderState.document}
-    {chat}
-    bind:chatInput
-    keySet={apiKey !== null}
-    inlineError={composerInlineError}
-    onSendChat={sendChat}
-    onReset={reset}
-  />
-{/if}
-
 <!--
-  Cinematic transition overlay (Task 13, spec §4.2). Rendered on top of
-  the live `extracting` state while a pending `ready` is waiting in
-  `pendingReady`. The overlay's `onComplete` flips the underlying state
-  to `ready`, which clears `transitioning` on the next render and
-  unmounts this block.
+  State render region — a single-cell CSS grid (`.state-stack`). Every
+  branch root carries `.state-stack__cell` so it is placed into the ONE
+  shared grid cell (`grid-area: stack`). During the extracting → ready
+  cross-fade both the outgoing and incoming roots are momentarily in the
+  DOM; sharing one cell makes them OVERLAP in the same position instead
+  of stacking in normal flow — so document height stays ~1 viewport and
+  there's no scrollbar-flash / content-sliding-up glitch (ucs-52o QA
+  fix). The cell's row height is `auto`, so a steady-state ReadyState
+  with a long conversation still grows the row and scrolls normally.
 
-  Reduced-motion users: `<CinematicTransition>` fires `onComplete`
-  synchronously on mount, so the underlying state advances on the same
-  tick the overlay appears — the user never sees the overlay paint.
+  The extracting and ready branches additionally carry `transition:fade`
+  for the cosmetic opacity cross-fade (superseding the GSAP overlay from
+  ucs-apq); `fadeDuration` collapses to 0 under prefers-reduced-motion
+  for an instant swap (ADR 0009).
 -->
-{#if transitioning}
-  <CinematicTransition from="extracting" to="ready" onComplete={advanceToReady} />
-{/if}
+<div class="state-stack">
+  {#if renderState.kind === 'idle'}
+    <div class="state-stack__cell">
+      <IdleState bind:urlInput onSubmit={loadUrl} />
+    </div>
+  {:else if renderState.kind === 'extracting'}
+    <div class="state-stack__cell" transition:fade={{ duration: fadeDuration }}>
+      <ExtractingState url={renderState.url} />
+    </div>
+  {:else if renderState.kind === 'extract-error'}
+    <div class="state-stack__cell">
+      <ExtractErrorState
+        message={renderState.message}
+        errorCode={renderState.errorCode}
+        onReset={reset}
+      />
+    </div>
+  {:else if renderState.kind === 'flagged'}
+    <div class="state-stack__cell">
+      <FlaggedState preview={renderState.preview} onContinue={confirmFlagged} onReset={reset} />
+    </div>
+  {:else if renderState.kind === 'ready'}
+    <div class="state-stack__cell" transition:fade={{ duration: fadeDuration }}>
+      <ReadyState
+        document={renderState.document}
+        {chat}
+        bind:chatInput
+        keySet={apiKey !== null}
+        inlineError={composerInlineError}
+        onSendChat={sendChat}
+        onReset={reset}
+      />
+    </div>
+  {/if}
+</div>
 
 <style>
+  /*
+    State render region — single-cell grid stack (ucs-52o QA fix).
+
+    `grid-template-areas: 'stack'` defines exactly ONE named cell. Every
+    branch root (`.state-stack__cell`) is assigned `grid-area: stack`, so
+    when two states briefly coexist during the extracting → ready
+    cross-fade they occupy the SAME cell and OVERLAP rather than stack as
+    two block boxes in normal flow. That keeps the document a single
+    viewport tall mid-fade (no 2× height spike, no scrollbar flash, no
+    ready content sliding up from below the fold).
+
+    The implicit/explicit row height is content-driven (`auto`), so a
+    steady-state ReadyState with a long conversation still grows the cell
+    and the page scrolls normally — the stack does not trap children in a
+    fixed-height/overflow box.
+  */
+  .state-stack {
+    display: grid;
+    grid-template-areas: 'stack';
+  }
+  .state-stack__cell {
+    grid-area: stack;
+    /* Keep the box-model neutral so the wrapper is purely a positioning
+       cell — children keep their own min-height: 100vh / layout. */
+    min-width: 0;
+  }
+
   /*
     Settings gear — fixed top-right surface, mirrors the top-left
     sys-voice header anchors in the state components. Keeps the gear
