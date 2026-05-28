@@ -412,42 +412,86 @@
   </aside>
 {/if}
 
-{#if renderState.kind === 'idle'}
-  <IdleState bind:urlInput onSubmit={loadUrl} />
-{:else if renderState.kind === 'extracting'}
-  <!--
-    The extracting and ready branches each carry `transition:fade`, so
-    Svelte runs an opacity out/in when the conditional swaps from
-    extracting → ready — a cosmetic cross-fade (ucs-52o, superseding the
-    GSAP overlay from ucs-apq). `fadeDuration` collapses to 0 under
-    prefers-reduced-motion for an instant swap (ADR 0009).
-  -->
-  <div transition:fade={{ duration: fadeDuration }}>
-    <ExtractingState url={renderState.url} />
-  </div>
-{:else if renderState.kind === 'extract-error'}
-  <ExtractErrorState
-    message={renderState.message}
-    errorCode={renderState.errorCode}
-    onReset={reset}
-  />
-{:else if renderState.kind === 'flagged'}
-  <FlaggedState preview={renderState.preview} onContinue={confirmFlagged} onReset={reset} />
-{:else if renderState.kind === 'ready'}
-  <div transition:fade={{ duration: fadeDuration }}>
-    <ReadyState
-      document={renderState.document}
-      {chat}
-      bind:chatInput
-      keySet={apiKey !== null}
-      inlineError={composerInlineError}
-      onSendChat={sendChat}
-      onReset={reset}
-    />
-  </div>
-{/if}
+<!--
+  State render region — a single-cell CSS grid (`.state-stack`). Every
+  branch root carries `.state-stack__cell` so it is placed into the ONE
+  shared grid cell (`grid-area: stack`). During the extracting → ready
+  cross-fade both the outgoing and incoming roots are momentarily in the
+  DOM; sharing one cell makes them OVERLAP in the same position instead
+  of stacking in normal flow — so document height stays ~1 viewport and
+  there's no scrollbar-flash / content-sliding-up glitch (ucs-52o QA
+  fix). The cell's row height is `auto`, so a steady-state ReadyState
+  with a long conversation still grows the row and scrolls normally.
+
+  The extracting and ready branches additionally carry `transition:fade`
+  for the cosmetic opacity cross-fade (superseding the GSAP overlay from
+  ucs-apq); `fadeDuration` collapses to 0 under prefers-reduced-motion
+  for an instant swap (ADR 0009).
+-->
+<div class="state-stack">
+  {#if renderState.kind === 'idle'}
+    <div class="state-stack__cell">
+      <IdleState bind:urlInput onSubmit={loadUrl} />
+    </div>
+  {:else if renderState.kind === 'extracting'}
+    <div class="state-stack__cell" transition:fade={{ duration: fadeDuration }}>
+      <ExtractingState url={renderState.url} />
+    </div>
+  {:else if renderState.kind === 'extract-error'}
+    <div class="state-stack__cell">
+      <ExtractErrorState
+        message={renderState.message}
+        errorCode={renderState.errorCode}
+        onReset={reset}
+      />
+    </div>
+  {:else if renderState.kind === 'flagged'}
+    <div class="state-stack__cell">
+      <FlaggedState preview={renderState.preview} onContinue={confirmFlagged} onReset={reset} />
+    </div>
+  {:else if renderState.kind === 'ready'}
+    <div class="state-stack__cell" transition:fade={{ duration: fadeDuration }}>
+      <ReadyState
+        document={renderState.document}
+        {chat}
+        bind:chatInput
+        keySet={apiKey !== null}
+        inlineError={composerInlineError}
+        onSendChat={sendChat}
+        onReset={reset}
+      />
+    </div>
+  {/if}
+</div>
 
 <style>
+  /*
+    State render region — single-cell grid stack (ucs-52o QA fix).
+
+    `grid-template-areas: 'stack'` defines exactly ONE named cell. Every
+    branch root (`.state-stack__cell`) is assigned `grid-area: stack`, so
+    when two states briefly coexist during the extracting → ready
+    cross-fade they occupy the SAME cell and OVERLAP rather than stack as
+    two block boxes in normal flow. That keeps the document a single
+    viewport tall mid-fade (no 2× height spike, no scrollbar flash, no
+    ready content sliding up from below the fold).
+
+    The implicit/explicit row height is content-driven (`auto`), so a
+    steady-state ReadyState with a long conversation still grows the cell
+    and the page scrolls normally — the stack does not trap children in a
+    fixed-height/overflow box.
+  */
+  .state-stack {
+    display: grid;
+    grid-template-areas: 'stack';
+  }
+  .state-stack__cell {
+    grid-area: stack;
+    /* Keep the box-model neutral so the wrapper is purely a positioning
+       cell — children keep their own min-height: 100vh / layout. */
+    min-width: 0;
+  }
+
   /*
     Settings gear — fixed top-right surface, mirrors the top-left
     sys-voice header anchors in the state components. Keeps the gear
