@@ -47,11 +47,9 @@ const MAX_CHAT_PAYLOAD_BYTES = 1024 * 1024;
  */
 export const POST: RequestHandler = async ({ request }) => {
   // Cheapest correct check: trust the advertised `content-length` and
-  // reject before we ever touch `request.json()` (which would buffer the
-  // whole body into memory). Absent or unparseable header → fall through
-  // and let downstream parsing handle it; modern fetch clients always
-  // set content-length on fixed-size bodies, and the schema parse below
-  // bounds memory in the no-header case via SvelteKit's body limit.
+  // reject before we ever touch the body (which would buffer it all into
+  // memory). An honest client that sets `content-length` on a fixed-size
+  // body is rejected here without us reading a single byte.
   const contentLengthHeader = request.headers.get('content-length');
   if (contentLengthHeader !== null) {
     const contentLength = Number(contentLengthHeader);
@@ -60,9 +58,28 @@ export const POST: RequestHandler = async ({ request }) => {
     }
   }
 
+  // Backstop for the header-less / lying client. In production the Vercel
+  // adapter calls `server.respond()` directly, bypassing SvelteKit's
+  // `getRequest`/`bodySizeLimit`, so a request that omits `content-length`
+  // (or chunks the body, which has no declared length) would otherwise be
+  // bounded only by Vercel's ~4.5 MB platform ceiling. We read the body
+  // ONCE as text, measure the decoded byte length, and reject before any
+  // model call. The stream can only be consumed once: reading `text()`
+  // then calling `request.json()` throws "body already read", so we parse
+  // the text we already have rather than re-reading the request.
+  let rawText: string;
+  try {
+    rawText = await request.text();
+  } catch {
+    return json({ error: 'Body must be valid JSON' }, { status: 400 });
+  }
+  if (new TextEncoder().encode(rawText).length > MAX_CHAT_PAYLOAD_BYTES) {
+    return json({ error: 'payload_too_large', limit: MAX_CHAT_PAYLOAD_BYTES }, { status: 413 });
+  }
+
   let raw: unknown;
   try {
-    raw = await request.json();
+    raw = JSON.parse(rawText);
   } catch {
     return json({ error: 'Body must be valid JSON' }, { status: 400 });
   }
