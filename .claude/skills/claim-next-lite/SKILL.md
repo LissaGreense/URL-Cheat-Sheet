@@ -29,7 +29,8 @@ If any condition fails, fall through to [`claim-next`](../../commands/claim-next
 | Step                                | Heavy            | Lite                     |
 | ----------------------------------- | ---------------- | ------------------------ |
 | Separate worktree (`wt-<id>`)       | yes              | no, branch in-place      |
-| `bun install` + `.env` symlink      | per-worktree     | inherit current          |
+| `bun install`                       | full (fresh wt)  | fast re-link (existing)  |
+| `.env` symlink                      | per-worktree     | inherit current          |
 | Empty bootstrap commit              | yes              | no                       |
 | Draft → ready PR transition         | yes              | open as ready directly   |
 | `gate:pr` meta-label                | yes              | no                       |
@@ -64,6 +65,16 @@ TYPE="$(bd show "$ID" --json | jq -r '.[0].issue_type' | sed 's/feature/feat/;s/
 # main/detached-at-origin/main. The lite lane doesn't create a
 # separate worktree.
 git checkout -b "feat/$ID-$SLUG"
+
+# Materialize deps. The lite lane reuses the current dir's node_modules,
+# but the MAIN repo dir can go stale if recent work happened only in
+# worktrees (each worktree runs its own install). A dep added in a
+# worktree session won't be in the main dir's node_modules, so tests
+# fail locally with "Failed to resolve import" even though CI (fresh
+# install) is green. This is a fast re-link (~300ms warm), not a full
+# install — cheap insurance. Discovered dogfooding ucs-vao: gsap was
+# missing from the main dir, 17 test files failed to load until install.
+bun install
 
 # No bootstrap commit, no draft PR. The impl agent writes code, then
 # we push + open PR as ready.
