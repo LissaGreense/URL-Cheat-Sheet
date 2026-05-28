@@ -6,7 +6,7 @@ description: Lite-lane orchestrator for small issues — branch in-place, single
 # Claim next (lite lane)
 
 A simplified orchestrator path for issues that don't earn the heavy
-pipeline's ceremony. Sits alongside [`claim-next`](../claim-next/SKILL.md) —
+pipeline's ceremony. Sits alongside [`claim-next`](../../commands/claim-next.md) —
 the entry point that picks between lanes.
 
 ## When the lite lane fits
@@ -22,7 +22,7 @@ All of these:
 - The orchestrator is currently on a clean working tree (detached at
   `origin/main` or on `main`).
 
-If any condition fails, fall through to [`claim-next`](../claim-next/SKILL.md).
+If any condition fails, fall through to [`claim-next`](../../commands/claim-next.md).
 
 ## What's stripped vs heavy
 
@@ -80,9 +80,12 @@ After impl reports back with the commit SHA:
 
 ```bash
 TITLE="$(bd show "$ID" --json | jq -r '.[0].title')"
+# Render to a temp file — inline --body "$(...)" and process-substitution
+# --body-file <(...) both intermittently fail in gh; a real file is reliable.
+scripts/render-pr-body.sh "$ID" > "/tmp/pr-body-$ID.md"
 gh pr create --base main --head "feat/$ID-$SLUG" \
   --title "$TYPE($ID): $TITLE" \
-  --body-file <(scripts/render-pr-body.sh "$ID")
+  --body-file "/tmp/pr-body-$ID.md"
 PR_URL="$(gh pr view --json url -q .url)"
 bd update "$ID" --notes "PR: $PR_URL"
 bd update "$ID" --status in_review

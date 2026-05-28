@@ -26,7 +26,7 @@ You are working in the URL-Cheat-Sheet monorepo. Before doing anything else:
 
 The pipeline has two lanes. Pick based on the issue's shape:
 
-- **Heavy lane** ([`claim-next`](../claim-next/SKILL.md) +
+- **Heavy lane** ([`claim-next`](../../commands/claim-next.md) +
   [`opening-pr-orchestrator`](../opening-pr-orchestrator/SKILL.md)) —
   separate worktree, draft → ready PR transition, committed review
   doc artifact, merge slot. Use for: cross-team work, `gate:qa` issues,
