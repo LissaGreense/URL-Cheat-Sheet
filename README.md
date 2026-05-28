@@ -7,22 +7,30 @@ Paste a URL, then chat with an agent that has actually read the page.
 
 ### ▸ Live demo — https://url-cheat-sheet.vercel.app
 
-A small personal demo with a futuristic, cinematic interface. Drop in any
-article or doc, watch it get ingested, then ask questions and get answers
-grounded in the page — with citations. The look is half the point: a dark,
-phosphor-green "cinematic memex HUD" with scramble-in text, ambient
-atmosphere layers, and a clean cross-fade between states.
+Instead of skimming a long article, RFC, or doc yourself, drop in its URL and
+just ask. The agent reads the page for you and answers grounded in the actual
+content — and every answer cites the source lines it used, so you can verify it
+rather than take it on faith. Useful for getting the gist of a dense page,
+pulling specific facts out of a wall of text, or interrogating documentation
+without reading it end to end.
+
+## How it works
+
+1. **Paste a URL.** The server fetches the page and extracts its readable
+   content: an SSRF-guarded fetch, a prompt-injection scan (`vard`), and
+   Readability parsing that strips nav/ads/boilerplate down to clean text plus a
+   heading outline. If a page can't be fetched, is too large, or trips the safety
+   scan, you get a clear status (`extracting` → `flagged` / `extract-error`)
+   rather than a silent failure.
+2. **The page becomes the agent's memory.** The extracted document is the only
+   thing the agent can see — answers come from the page, not the model's prior
+   knowledge.
+3. **Ask questions.** Chat streams answers from Claude. Under the hood the agent
+   works through the document with four tools — outline it, search it, read
+   specific line ranges — then finalizes a reply with citations back to the
+   source lines. Long sessions stay anchored to what the page actually says.
 
 Chatting uses your own Anthropic API key (see [Bring your own key](#bring-your-own-key)).
-
-## What's here
-
-The end-to-end loop ships: paste a URL → server extracts main content
-(SSRF-guarded fetch, prompt-injection scan via `vard`, Readability
-parsing for clean text + heading outline) → cinematic UI walks the
-user through 5 states (`idle`, `extracting`, `flagged`, `extract-error`,
-`ready`) → chat panel streams responses from Claude Sonnet 4.6 with
-four tools wired to the extracted document.
 
 **Agent tools** (`packages/agent/src/tools/`):
 
