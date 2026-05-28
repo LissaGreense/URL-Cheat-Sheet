@@ -95,6 +95,7 @@
     fixed-position anchors that sit outside the column.
   */
   .idle-state {
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
