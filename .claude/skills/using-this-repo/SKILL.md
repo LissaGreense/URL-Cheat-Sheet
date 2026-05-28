@@ -22,13 +22,36 @@ You are working in the URL-Cheat-Sheet monorepo. Before doing anything else:
 - `.beads/` — task DB (bd v1.x: worktree-safe by default; prefix `ucs`)
 - `docs/` — every doc artifact (see `docs/README.md`)
 
+## Two orchestrator lanes
+
+The pipeline has two lanes. Pick based on the issue's shape:
+
+- **Heavy lane** ([`claim-next`](../claim-next/SKILL.md) +
+  [`opening-pr-orchestrator`](../opening-pr-orchestrator/SKILL.md)) —
+  separate worktree, draft → ready PR transition, committed review
+  doc artifact, merge slot. Use for: cross-team work, `gate:qa` issues,
+  P0/P1, anything labeled `lane:heavy` or `audit-trail`.
+- **Lite lane** ([`claim-next-lite`](../claim-next-lite/SKILL.md)) —
+  branch in-place, single commit, no review doc, no merge slot. Default
+  for single-team P2-P4 issues without `gate:qa`. ~10× lower per-issue
+  overhead — see the lite skill's "Why this exists" for the empirical
+  motivation.
+
+Heavy lane is the safer default; lite is opt-in via heuristic when the
+issue fits.
+
 ## Branch-first
 
-All work happens on `feat/<bd-id>-<slug>` branches. The orchestrator
-opens the PR at worktree creation (`pr-open`), marks it ready when impl
-completes (`pr-ready`), and merges after gates clear (`pr-merge`). See
-the [`opening-pr-orchestrator`](../opening-pr-orchestrator/SKILL.md)
-skill for the actual recipes.
+All work happens on `feat/<bd-id>-<slug>` branches.
+
+The heavy lane orchestrator opens the PR at worktree creation
+(`pr-open`), marks it ready when impl completes (`pr-ready`), and
+merges after gates clear (`pr-merge`). See the
+[`opening-pr-orchestrator`](../opening-pr-orchestrator/SKILL.md) skill
+for the actual recipes.
+
+The lite lane opens the PR as ready directly after impl pushes — see
+[`claim-next-lite`](../claim-next-lite/SKILL.md).
 
 Direct pushes to `main` are blocked by GitHub branch protection
 server-side (required checks `typecheck`/`lint`/`test`/`build`,
@@ -93,9 +116,26 @@ Skip:
 
 See ucs-mmj for the four-incident postmortem that motivated this rule.
 
+## bd sync model
+
+bd state is canonical in a Dolt database at `.beads/embeddeddolt/`
+(gitignored). Cross-machine sync uses a Dolt remote stored under
+`refs/dolt/data` on the **same GitHub repo** — no DoltHub, no extra
+service. `.beads/issues.jsonl` is gitignored; it's a local export
+for `bv` viewer compatibility, not the sync channel.
+
+- After `bd close`: `bd dolt push` (wired into both orchestrator
+  lanes' merge actions).
+- On worktree creation: `bd dolt pull` (same).
+- Fresh clone: `bash scripts/setup-bd.sh` configures the remote;
+  then `bd dolt pull` populates local state.
+
+See ADR 0010 for the full migration rationale.
+
 ## Hard rules
 
 - `bd` v1.x (>= 1.0.2): worktree-safe by default — no flags needed. `--no-daemon` was removed upstream and errors.
+- `.beads/issues.jsonl` is **gitignored** — do not commit it. bd state lives in the Dolt DB; sync via `bd dolt push`/`pull`. See ADR 0010.
 - `bun.lock` is text (never commit `bun.lockb`).
 - SvelteKit adapter runtime is `experimental_bun1.x`.
 - Zod 4: use `z.strictObject()`, never `.strict()`.

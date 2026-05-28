@@ -13,11 +13,14 @@
    pre-push hook that blocks direct pushes to `main`. Verify with
    `git config core.hooksPath` (should print `scripts/git-hooks`).
    Then run `bash scripts/setup-bd.sh` to provision the custom bd
-   statuses (`proposed`, `in_review`) that the `task-creation`,
-   `task-enrichment`, and `opening-pr-orchestrator` skills depend on.
+   statuses (`proposed`, `in_review`), the merge slot, and the Dolt
+   sync remote that the orchestrator pipeline depends on.
    (Built-in `open` is the canonical "enriched and claimable" state —
    see ADR 0006 for why we no longer use custom `enriched`/`ready`.)
-   Both scripts are idempotent.
+   Both scripts are idempotent. After `setup-bd.sh` configures the
+   Dolt remote, run `bd dolt pull` once to populate local bd state
+   from the remote — fresh clones start with an empty Dolt DB and
+   need this to see existing issues. See ADR 0010.
 5. **For tasks that call a real model** (live QA on the chat UI, eval
    suites under `packages/evals/`, anything hitting `/api/chat` with an
    actual response): the project expects `ANTHROPIC_API_KEY` to be set
@@ -31,6 +34,11 @@
 - `bd` v1.x (>= 1.0.2): worktree-safe by default via git common-directory
   discovery — no flags needed. The legacy `--no-daemon` flag was removed
   upstream in v0.51.0 (Feb 2026) and now errors. Project prefix: `ucs`.
+- bd state is synced via a Dolt remote at `refs/dolt/data` on the
+  same GitHub repo (see ADR 0010). `.beads/issues.jsonl` is gitignored;
+  it's a local export for `bv` viewer compat, not the canonical state.
+  Cross-machine sync uses `bd dolt pull` / `bd dolt push` — wired into
+  the orchestrator's `pr-open` and `pr-merge` recipes.
 - `bun.lock` is the lockfile — never commit `bun.lockb`.
 - SvelteKit adapter runtime: `experimental_bun1.x` (see ADR 0001).
 - Zod 4: `z.strictObject()`, never `.strict()`. Unified `error` param.
