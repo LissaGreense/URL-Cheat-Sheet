@@ -54,3 +54,8 @@ issue-prefix: "ucs"
 # - github.repo
 
 sync.remote: "git+https://github.com/LissaGreense/URL-Cheat-Sheet.git"
+
+# JSONL is gitignored (ADR 0010) — bd's auto-backup must not try to
+# `git add` it, or every bd write prints "auto-export: git add failed".
+# State syncs via the Dolt remote (sync.remote above), not the JSONL.
+backup.git-push: false
